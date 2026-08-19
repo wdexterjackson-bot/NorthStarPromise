@@ -3,6 +3,7 @@ excluded:
   - "**/.swiftpm"
   - NorthStar.xcodeproj
   - ProjectDocumentation
+  - .claude
 
 # Trailing commas in multi-line literals make future additions single-line
 # diffs; every `Package.swift` in this repo uses them deliberately.
@@ -13,10 +14,12 @@ identifier_name:
   # Short parameter labels that read clearly in context: a route-change pair
   # (from/to), an audit timestamp (at), a loop index (i), and the local time
   # variable in a sine-wave formula (t). `id` is mandated by `Identifiable`,
-  # not a style choice.
+  # not a style choice. `db` is GRDB's own convention for a `Database`
+  # closure parameter, used throughout its own source and docs.
   excluded:
     - to
     - at
     - i
     - t
     - id
+    - db

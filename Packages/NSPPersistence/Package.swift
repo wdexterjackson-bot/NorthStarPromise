@@ -8,13 +8,15 @@ let package = Package(
         .library(name: "NSPPersistence", targets: ["NSPPersistence"])
     ],
     dependencies: [
-        .package(path: "../NSPCore")
+        .package(path: "../NSPCore"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.29.0"),
     ],
     targets: [
         .target(
             name: "NSPPersistence",
             dependencies: [
-                .product(name: "NSPCore", package: "NSPCore")
+                .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "GRDB", package: "GRDB.swift"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
