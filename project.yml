@@ -1,0 +1,140 @@
+name: NorthStar
+options:
+  bundleIdPrefix: com.northstarpromise
+  deploymentTarget:
+    iOS: "18.0"
+    watchOS: "11.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGNING_ALLOWED: NO
+
+# All business logic lives in Packages/*; targets below are thin SwiftUI shells
+# that depend on those local packages. See CLAUDE.md §3.
+packages:
+  NSPCore:
+    path: Packages/NSPCore
+  NSPPersistence:
+    path: Packages/NSPPersistence
+  NSPPolicy:
+    path: Packages/NSPPolicy
+  NSPMedia:
+    path: Packages/NSPMedia
+  NSPTransfer:
+    path: Packages/NSPTransfer
+  NSPSync:
+    path: Packages/NSPSync
+  NSPIntelligence:
+    path: Packages/NSPIntelligence
+  NSPBackendClient:
+    path: Packages/NSPBackendClient
+  NSPActions:
+    path: Packages/NSPActions
+  NSPDesignSystem:
+    path: Packages/NSPDesignSystem
+  NSPTestSupport:
+    path: Packages/NSPTestSupport
+
+targets:
+  NorthStarPhone:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: App/Phone
+    info:
+      path: App/Phone/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        PRODUCT_BUNDLE_IDENTIFIER: com.northstarpromise.phone
+    dependencies:
+      - package: NSPCore
+      - package: NSPPersistence
+      - package: NSPPolicy
+      - package: NSPMedia
+      - package: NSPTransfer
+      - package: NSPSync
+      - package: NSPIntelligence
+      - package: NSPBackendClient
+      - package: NSPActions
+      - package: NSPDesignSystem
+      - target: NorthStarWatch
+
+  NorthStarPhoneTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: AppTests/Phone
+    dependencies:
+      - target: NorthStarPhone
+      - package: NSPTestSupport
+
+  NorthStarWatch:
+    type: application
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: App/Watch
+    info:
+      path: App/Watch/Info.plist
+      properties:
+        UILaunchScreen: {}
+        WKApplication: true
+        WKWatchOnly: false
+        WKCompanionAppBundleIdentifier: com.northstarpromise.phone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.northstarpromise.phone.watchkitapp
+        SKIP_INSTALL: NO
+    dependencies:
+      - package: NSPCore
+      - package: NSPPersistence
+      - package: NSPPolicy
+      - package: NSPMedia
+      - package: NSPTransfer
+      - package: NSPDesignSystem
+
+  NorthStarWatchTests:
+    type: bundle.unit-test
+    platform: watchOS
+    deploymentTarget: "11.0"
+    sources:
+      - path: AppTests/Watch
+    dependencies:
+      - target: NorthStarWatch
+      - package: NSPTestSupport
+
+schemes:
+  NorthStarPhone:
+    build:
+      targets:
+        NorthStarPhone: all
+        NorthStarPhoneTests: [test]
+    test:
+      targets:
+        - NorthStarPhoneTests
+  NorthStarWatch:
+    build:
+      targets:
+        NorthStarWatch: all
+        NorthStarWatchTests: [test]
+    test:
+      targets:
+        - NorthStarWatchTests
