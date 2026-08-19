@@ -23,7 +23,7 @@
 	<key>WKApplication</key>
 	<true/>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.northstarpromise.phone</string>
+	<string>com.dexterjackson.northstarpromise.phone</string>
 	<key>WKWatchOnly</key>
 	<false/>
 </dict>

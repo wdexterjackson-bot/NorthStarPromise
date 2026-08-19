@@ -1,6 +1,6 @@
 name: NorthStar
 options:
-  bundleIdPrefix: com.northstarpromise
+  bundleIdPrefix: com.dexterjackson.northstarpromise
   deploymentTarget:
     iOS: "18.0"
     watchOS: "11.0"
@@ -62,7 +62,7 @@ targets:
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"
-        PRODUCT_BUNDLE_IDENTIFIER: com.northstarpromise.phone
+        PRODUCT_BUNDLE_IDENTIFIER: com.dexterjackson.northstarpromise.phone
     dependencies:
       - package: NSPCore
       - package: NSPPersistence
@@ -98,10 +98,10 @@ targets:
         UILaunchScreen: {}
         WKApplication: true
         WKWatchOnly: false
-        WKCompanionAppBundleIdentifier: com.northstarpromise.phone
+        WKCompanionAppBundleIdentifier: com.dexterjackson.northstarpromise.phone
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.northstarpromise.phone.watchkitapp
+        PRODUCT_BUNDLE_IDENTIFIER: com.dexterjackson.northstarpromise.phone.watchkitapp
         SKIP_INSTALL: NO
     dependencies:
       - package: NSPCore
