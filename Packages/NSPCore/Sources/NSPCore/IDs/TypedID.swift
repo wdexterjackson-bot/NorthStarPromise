@@ -19,14 +19,17 @@ public struct TypedID<Tag>: Sendable, Hashable, Codable, CustomStringConvertible
 
     /// Mints a fresh, time-ordered ID. `clock` is required — never wall-clock
     /// implicitly — so tests can produce deterministic, sortable fixtures.
+    /// Takes the existential `any Clock` (not `some Clock`) so callers can
+    /// store their clock as a plain `let clock: Clock` property, the normal
+    /// DI shape (docs/11 §4), without that generic parameter propagating.
     public static func generate(
-        clock: some Clock,
+        clock: any Clock,
         randomSource: inout some RandomNumberGenerator
     ) -> TypedID<Tag> {
         TypedID(rawValue: UUIDv7.generate(timestamp: clock.now(), using: &randomSource))
     }
 
-    public static func generate(clock: some Clock) -> TypedID<Tag> {
+    public static func generate(clock: any Clock) -> TypedID<Tag> {
         var generator = SystemRandomNumberGenerator()
         return generate(clock: clock, randomSource: &generator)
     }
