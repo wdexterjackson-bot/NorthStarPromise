@@ -5,16 +5,16 @@ let package = Package(
     name: "NSPDesignSystem",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPDesignSystem", targets: ["NSPDesignSystem"]),
+        .library(name: "NSPDesignSystem", targets: ["NSPDesignSystem"])
     ],
     dependencies: [
-        .package(path: "../NSPCore"),
+        .package(path: "../NSPCore")
     ],
     targets: [
         .target(
             name: "NSPDesignSystem",
             dependencies: [
-                .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "NSPCore", package: "NSPCore")
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

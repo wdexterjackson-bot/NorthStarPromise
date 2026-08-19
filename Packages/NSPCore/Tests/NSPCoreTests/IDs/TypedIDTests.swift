@@ -6,10 +6,10 @@ import Testing
 @Suite("TypedID")
 struct TypedIDTests {
     @Test func test_generate_twoCalls_produceDistinctIDs() {
-        let a = MeetingID.generate(clock: SystemClock())
-        let b = MeetingID.generate(clock: SystemClock())
+        let first = MeetingID.generate(clock: SystemClock())
+        let second = MeetingID.generate(clock: SystemClock())
 
-        #expect(a != b)
+        #expect(first != second)
     }
 
     @Test func test_generate_isTimeOrdered_laterTimestampSortsAfter() {

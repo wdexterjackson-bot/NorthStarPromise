@@ -5,7 +5,7 @@ let package = Package(
     name: "NSPTestSupport",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPTestSupport", targets: ["NSPTestSupport"]),
+        .library(name: "NSPTestSupport", targets: ["NSPTestSupport"])
     ],
     dependencies: [
         .package(path: "../NSPCore"),

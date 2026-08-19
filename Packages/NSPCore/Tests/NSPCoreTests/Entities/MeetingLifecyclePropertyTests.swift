@@ -25,6 +25,9 @@ struct MeetingLifecyclePropertyTests {
     static let sequenceCount = 10_000
     static let stepsPerSequence = 12
 
+    // One case per MeetingCommand — a lookup table would obscure, not
+    // simplify, this enumeration.
+    // swiftlint:disable:next cyclomatic_complexity
     static func randomCommand(using rng: inout SeededGenerator) -> MeetingCommand {
         switch Int.random(in: 0..<16, using: &rng) {
         case 0: return .arm

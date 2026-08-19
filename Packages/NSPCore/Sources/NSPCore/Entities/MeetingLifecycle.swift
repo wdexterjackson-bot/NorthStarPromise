@@ -41,11 +41,15 @@ public struct MeetingLifecycle: Sendable, Hashable {
         self.recordedSampleCount = 0
     }
 
+    // swiftlint:disable cyclomatic_complexity function_body_length
     /// The exhaustive transition function. Legal moves are the explicit
     /// cases; everything else is `.illegalTransition` — that catch-all *is*
     /// the exhaustiveness the ticket asks for: every `(state, command)` pair
     /// not named in docs/02 §3 is deliberately, uniformly rejected rather
-    /// than left to crash or silently no-op.
+    /// than left to crash or silently no-op. Its size and branch count come
+    /// directly from the one-case-per-edge table in docs/02 §3; splitting it
+    /// would trade a single source of truth for indirection, so complexity
+    /// and length checks are suppressed here, NSP-007.
     public static func transition(
         from lifecycle: MeetingLifecycle,
         command: MeetingCommand
@@ -96,7 +100,8 @@ public struct MeetingLifecycle: Sendable, Hashable {
 
         case (.interrupted, .finalize(let sampleCount)):
             guard sampleCount == nil else {
-                throw .invalidPayload(reason: "no segment is open while .interrupted; pass finalSegmentSampleCount: nil")
+                throw .invalidPayload(
+                    reason: "no segment is open while .interrupted; pass finalSegmentSampleCount: nil")
             }
             next.state = .finalizing
 
@@ -133,6 +138,7 @@ public struct MeetingLifecycle: Sendable, Hashable {
 
         return next
     }
+    // swiftlint:enable cyclomatic_complexity function_body_length
 
     private mutating func closeCurrentSegment(sampleCount: Int64) {
         closedSegments.append(ClosedSegment(sequence: closedSegments.count, sampleCount: sampleCount))

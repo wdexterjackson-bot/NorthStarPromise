@@ -5,7 +5,7 @@ let package = Package(
     name: "NSPActions",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPActions", targets: ["NSPActions"]),
+        .library(name: "NSPActions", targets: ["NSPActions"])
     ],
     dependencies: [
         .package(path: "../NSPIntelligence"),

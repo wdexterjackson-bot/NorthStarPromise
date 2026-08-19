@@ -5,16 +5,16 @@ let package = Package(
     name: "NSPIntelligence",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPIntelligence", targets: ["NSPIntelligence"]),
+        .library(name: "NSPIntelligence", targets: ["NSPIntelligence"])
     ],
     dependencies: [
-        .package(path: "../NSPSync"),
+        .package(path: "../NSPSync")
     ],
     targets: [
         .target(
             name: "NSPIntelligence",
             dependencies: [
-                .product(name: "NSPSync", package: "NSPSync"),
+                .product(name: "NSPSync", package: "NSPSync")
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

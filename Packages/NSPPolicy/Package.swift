@@ -5,16 +5,16 @@ let package = Package(
     name: "NSPPolicy",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPPolicy", targets: ["NSPPolicy"]),
+        .library(name: "NSPPolicy", targets: ["NSPPolicy"])
     ],
     dependencies: [
-        .package(path: "../NSPCore"),
+        .package(path: "../NSPCore")
     ],
     targets: [
         .target(
             name: "NSPPolicy",
             dependencies: [
-                .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "NSPCore", package: "NSPCore")
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

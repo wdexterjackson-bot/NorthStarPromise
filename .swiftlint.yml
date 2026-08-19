@@ -1,0 +1,22 @@
+excluded:
+  - "**/.build"
+  - "**/.swiftpm"
+  - NorthStar.xcodeproj
+  - ProjectDocumentation
+
+# Trailing commas in multi-line literals make future additions single-line
+# diffs; every `Package.swift` in this repo uses them deliberately.
+disabled_rules:
+  - trailing_comma
+
+identifier_name:
+  # Short parameter labels that read clearly in context: a route-change pair
+  # (from/to), an audit timestamp (at), a loop index (i), and the local time
+  # variable in a sine-wave formula (t). `id` is mandated by `Identifiable`,
+  # not a style choice.
+  excluded:
+    - to
+    - at
+    - i
+    - t
+    - id

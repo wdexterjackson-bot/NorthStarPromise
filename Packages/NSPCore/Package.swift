@@ -5,15 +5,13 @@ let package = Package(
     name: "NSPCore",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPCore", targets: ["NSPCore"]),
+        .library(name: "NSPCore", targets: ["NSPCore"])
     ],
-    dependencies: [
-    ],
+    dependencies: [],
     targets: [
         .target(
             name: "NSPCore",
-            dependencies: [
-            ],
+            dependencies: [],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

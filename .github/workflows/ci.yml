@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The fast inner loop: package tests only, no simulator, no signing.
+  # docs/10 §1: "the mass" of the test pyramid — target ~90s.
+  packages:
+    name: Lint + package tests
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Install toolchain
+        run: brew install xcodegen swiftlint swift-format
+      - name: make gen
+        run: make gen
+      - name: make lint
+        run: make lint
+      - name: make test
+        run: make test
+      - name: make test LOCAL_ONLY=1
+        run: make test LOCAL_ONLY=1
+
+  # Simulator layer: state machines and file handling only — proves nothing
+  # acoustic (docs/10 §1). Runs on the latest supported OS per PR.
+  simulators:
+    name: Simulator suites
+    runs-on: macos-15
+    timeout-minutes: 20
+    needs: packages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.2"
+      - name: Install toolchain
+        run: brew install xcodegen
+      - name: make gen
+        run: make gen
+      - name: make test-phone
+        run: make test-phone
+      - name: make test-watch
+        run: make test-watch
+
+  # Only when Backend/** is touched (docs/10 §9). No-op until NSP-094 lands
+  # an actual backend to test.
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: contains(github.event.pull_request.changed_files, 'Backend/')
+    steps:
+      - uses: actions/checkout@v4
+      - name: make backend-test
+        run: make backend-test
+
+# Not yet wired up: a `LocalOnly` build-configuration job that compiles
+# NSPBackendClient out of the app target entirely (docs/01 §4). That
+# configuration doesn't exist in project.yml yet — it's NSP-017's
+# "egress architecture lint" ticket. `make test LOCAL_ONLY=1` above is the
+# package-level proxy for it until then.

@@ -11,6 +11,16 @@ define boot_sim
 $(shell xcrun simctl list devices available 2>/dev/null | grep "$(1)" | head -1 | sed -E 's/.*\(([0-9A-F-]+)\).*/\1/')
 endef
 
+# LOCAL_ONLY=1 compiles -DLOCAL_ONLY into every package under test, so code
+# behind that flag can prove it has no cloud dependency (docs/01 §4 "the
+# LocalOnly build configuration"; docs/10 §9, "make test LOCAL_ONLY=1").
+LOCAL_ONLY ?= 0
+ifeq ($(LOCAL_ONLY),1)
+SWIFT_TEST_FLAGS := -Xswiftc -DLOCAL_ONLY
+else
+SWIFT_TEST_FLAGS :=
+endif
+
 bootstrap:
 	@command -v xcodegen >/dev/null || brew install xcodegen
 	@command -v swiftlint >/dev/null || brew install swiftlint
@@ -24,7 +34,7 @@ gen:
 test:
 	@for pkg in $(PACKAGES); do \
 		echo "== swift test: $$pkg =="; \
-		(cd Packages/$$pkg && swift test) || exit 1; \
+		(cd Packages/$$pkg && swift test $(SWIFT_TEST_FLAGS)) || exit 1; \
 	done
 
 test-phone: gen

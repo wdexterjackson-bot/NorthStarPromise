@@ -5,16 +5,16 @@ let package = Package(
     name: "NSPPersistence",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPPersistence", targets: ["NSPPersistence"]),
+        .library(name: "NSPPersistence", targets: ["NSPPersistence"])
     ],
     dependencies: [
-        .package(path: "../NSPCore"),
+        .package(path: "../NSPCore")
     ],
     targets: [
         .target(
             name: "NSPPersistence",
             dependencies: [
-                .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "NSPCore", package: "NSPCore")
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

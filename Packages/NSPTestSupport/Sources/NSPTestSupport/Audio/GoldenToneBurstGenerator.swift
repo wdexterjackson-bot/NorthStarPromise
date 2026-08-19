@@ -57,7 +57,8 @@ public enum GoldenToneBurstGenerator {
             }
             let end = Int64(samples.count)
 
-            bursts.append(ToneBurst(range: SampleRangeSpec(startSample: start, endSample: end), frequencyHz: frequencyHz))
+            let range = SampleRangeSpec(startSample: start, endSample: end)
+            bursts.append(ToneBurst(range: range, frequencyHz: frequencyHz))
         }
 
         return (samples, bursts)

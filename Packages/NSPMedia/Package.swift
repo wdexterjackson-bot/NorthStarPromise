@@ -5,7 +5,7 @@ let package = Package(
     name: "NSPMedia",
     platforms: [.iOS(.v18), .watchOS(.v11), .macOS(.v15)],
     products: [
-        .library(name: "NSPMedia", targets: ["NSPMedia"]),
+        .library(name: "NSPMedia", targets: ["NSPMedia"])
     ],
     dependencies: [
         .package(path: "../NSPPersistence"),
