@@ -113,4 +113,25 @@ struct ArchitectureTests {
             }
         }
     }
+
+    #if LOCAL_ONLY
+        /// NSP-017 / POL-004 — under `-DLOCAL_ONLY` (`make test LOCAL_ONLY=1`),
+        /// `NSPBackendClient` itself compiles to an empty module (its own
+        /// source is `#if !LOCAL_ONLY`-gated), so any remaining `import
+        /// NSPBackendClient` elsewhere would fail to resolve real symbols.
+        /// This is the forward-looking regression gate: it fails the moment
+        /// any future ticket adds such an import, rather than waiting to
+        /// discover the resulting compile error downstream.
+        @Test func test_architecture_localOnly_noPackageImportsNSPBackendClient() {
+            let files = Self.swiftFiles(under: "Packages") + Self.swiftFiles(under: "App")
+
+            for file in files {
+                guard file.packageName != "NSPBackendClient" else { continue }
+                #expect(
+                    !file.imports.contains("NSPBackendClient"),
+                    "\(file.path) imports NSPBackendClient, but LocalOnly compiles it out entirely (docs/01 §4)"
+                )
+            }
+        }
+    #endif
 }
