@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "NSPMedia", targets: ["NSPMedia"])
     ],
     dependencies: [
+        .package(path: "../NSPCore"),
         .package(path: "../NSPPersistence"),
         .package(path: "../NSPPolicy"),
     ],
@@ -15,6 +16,7 @@ let package = Package(
         .target(
             name: "NSPMedia",
             dependencies: [
+                .product(name: "NSPCore", package: "NSPCore"),
                 .product(name: "NSPPersistence", package: "NSPPersistence"),
                 .product(name: "NSPPolicy", package: "NSPPolicy"),
             ],
