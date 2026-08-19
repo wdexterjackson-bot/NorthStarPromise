@@ -51,3 +51,6 @@ public typealias IntegrationReceiptID = TypedID<IntegrationReceiptIDTag>
 
 public enum AuditEventIDTag: Sendable {}
 public typealias AuditEventID = TypedID<AuditEventIDTag>
+
+public enum GrantIDTag: Sendable {}
+public typealias GrantID = TypedID<GrantIDTag>
