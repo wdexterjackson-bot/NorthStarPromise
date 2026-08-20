@@ -174,6 +174,39 @@ public enum CloudKitRecordMapper {
         return record
     }
 
+    /// `localURL` is never a synced field — it's meaningless across devices
+    /// — so a freshly decoded `Segment` always has `localURL == nil`, which
+    /// is exactly the signal `MeetingAvailabilityReconciler` needs: audio
+    /// hasn't downloaded to *this* device yet, even though the metadata has.
+    public static func segment(from record: CKRecord) throws -> Segment {
+        let recordType = CloudKitRecordType.segment
+        guard let segmentUUID = UUID(uuidString: record.recordID.recordName) else {
+            throw SyncError.malformedField(record: recordType, field: "recordID")
+        }
+        let meetingUUID = try record.requiredUUID(forKey: "meetingID", recordType: recordType)
+        let deviceUUID = try record.requiredUUID(forKey: "deviceID", recordType: recordType)
+        guard let codec = AudioCodec(rawValue: try record.requiredString(forKey: "codec", recordType: recordType))
+        else {
+            throw SyncError.malformedField(record: recordType, field: "codec")
+        }
+        guard let sequence = record["sequence"] as? Int, let sampleRate = record["sampleRate"] as? Int,
+            let channels = record["channels"] as? Int, let bitRate = record["bitRate"] as? Int,
+            let startSample = record["startSample"] as? Int64, let sampleCount = record["sampleCount"] as? Int64
+        else {
+            throw SyncError.missingField(record: recordType, field: "<multiple>")
+        }
+        let transferState =
+            (record["transferStateJSON"] as? Data).flatMap { try? JSONDecoder().decode(TransferState.self, from: $0) }
+            ?? .local
+
+        return Segment(
+            segmentID: SegmentID(rawValue: segmentUUID), meetingID: MeetingID(rawValue: meetingUUID),
+            deviceID: DeviceID(rawValue: deviceUUID), sequence: sequence, codec: codec, sampleRate: sampleRate,
+            channels: channels, bitRate: bitRate, startSample: startSample, sampleCount: sampleCount,
+            sha256: record["sha256"] as? Data, localURL: nil, cloudAssetRef: record["cloudAssetRef"] as? String,
+            transferState: transferState, isRepairedTail: (record["isRepairedTail"] as? Bool) ?? false)
+    }
+
     // MARK: - TranscriptTurn
 
     public static func recordID(for turnID: TranscriptTurnID, zoneID: CKRecordZone.ID) -> CKRecord.ID {
