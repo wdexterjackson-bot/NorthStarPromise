@@ -161,6 +161,14 @@ public actor Segmenter {
         try await recordTimelineEvent(.marker(kind: kind))
     }
 
+    /// The current sample position — same math `recordTimelineEvent` uses,
+    /// without recording anything. For continuous note-taking (iPad's
+    /// ruled-paper canvas, docs/07 §5): a typed line isn't a timeline
+    /// event, just a `NoteBlock` that wants an accurate anchor.
+    public func currentSampleOffset() -> Int64 {
+        cumulativeSampleCount + samplesInCurrentSegment
+    }
+
     /// Closes the final segment, then seals the manifest (docs/03 §3.4) —
     /// the only place `ManifestWriter.seal` is called on the happy path.
     public func stop() async throws -> Manifest {

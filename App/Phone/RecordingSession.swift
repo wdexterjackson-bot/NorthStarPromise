@@ -161,6 +161,22 @@ public final class RecordingSession {
         }
     }
 
+    /// The current live sample position, or `nil` outside `.recording`.
+    /// For continuous note-taking (iPad's ruled-paper canvas) rather than
+    /// a discrete marker — see `Segmenter.currentSampleOffset()`.
+    public func currentSampleOffset() async -> Int64? {
+        guard state == .recording, let captureEngine else { return nil }
+        return await captureEngine.currentSampleOffset()
+    }
+
+    /// The real, hardware-resolved sample rate for the active session, or
+    /// `nil` before capture has started. Lets a caller convert a persisted
+    /// sample offset back into seconds without guessing a rate.
+    public func currentSampleRate() async -> Int? {
+        guard let captureEngine else { return nil }
+        return await captureEngine.resolvedAudioFormat()?.sampleRate
+    }
+
     /// Labels a marker from the in-session list. Editing an existing
     /// `NoteBlock`'s content is the same operation `NotesTab`'s composer
     /// does post-hoc — this is just that same edit, offered at the moment

@@ -1,6 +1,7 @@
 import NSPCore
 import NSPDesignSystem
 import SwiftUI
+import UIKit
 
 /// The app's dashboard — the primary launch screen. Beyond docs/07 §4's
 /// fixed section order (Now, Needs review, Upcoming, Attention), this adds
@@ -14,6 +15,11 @@ struct TodayView: View {
     let environment: AppEnvironment
     let session: RecordingSession
     let selectTab: (AppTab) -> Void
+    /// When set (iPad), tapping a meeting calls this instead of pushing
+    /// via `NavigationLink` — iPad routes selection into a third column
+    /// rather than a navigation stack (`PadRootView`). `nil` (default)
+    /// preserves the iPhone push behavior unchanged.
+    var onSelectMeeting: ((MeetingID) -> Void)?
 
     @State private var meetings: [Meeting] = []
     @State private var actions: [Action] = []
@@ -144,7 +150,7 @@ struct TodayView: View {
                 }
                 VStack(spacing: 2) {
                     Text("Start Recording").font(.title3.weight(.semibold))
-                    Text("Capture audio on this iPhone")
+                    Text("Capture audio on this \(Self.deviceLabel)")
                         .font(.caption)
                         .foregroundStyle(NSPColor.secondaryText)
                 }
@@ -172,10 +178,9 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: NSPSpacing.medium) {
                 Text("Needs Review").font(.title3.weight(.bold))
                 ForEach(needsReview) { meeting in
-                    NavigationLink(value: meeting.meetingID) {
+                    meetingLink(meeting.meetingID) {
                         MeetingRow(meeting: meeting).nspCard()
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -190,12 +195,11 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: NSPSpacing.medium) {
                 sectionHeader("Action Items", seeAllTab: .actions)
                 ForEach(openActions.prefix(Self.maxActionRows)) { action in
-                    NavigationLink(value: action.meetingID) {
+                    meetingLink(action.meetingID) {
                         DashboardActionRow(
                             action: action, meetingTitle: meetingTitles[action.meetingID] ?? "Untitled meeting",
                             isOverdue: Self.isOverdue(action, now: environment.clock.now()))
                     }
-                    .buttonStyle(.plain)
                 }
             }
         }
@@ -212,12 +216,28 @@ struct TodayView: View {
             VStack(alignment: .leading, spacing: NSPSpacing.medium) {
                 sectionHeader("Library", seeAllTab: .library)
                 ForEach(recent.prefix(Self.maxLibraryRows)) { meeting in
-                    NavigationLink(value: meeting.meetingID) {
+                    meetingLink(meeting.meetingID) {
                         MeetingRow(meeting: meeting).nspCard()
                     }
-                    .buttonStyle(.plain)
                 }
             }
+        }
+    }
+
+    /// Routes a meeting tap to either a navigation push (iPhone) or the
+    /// `onSelectMeeting` callback (iPad) — see the property's doc comment.
+    @ViewBuilder
+    private func meetingLink<Label: View>(_ meetingID: MeetingID, @ViewBuilder label: () -> Label) -> some View {
+        if let onSelectMeeting {
+            Button {
+                onSelectMeeting(meetingID)
+            } label: {
+                label()
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink(value: meetingID) { label() }
+                .buttonStyle(.plain)
         }
     }
 
@@ -253,6 +273,10 @@ struct TodayView: View {
     private static func isOverdue(_ action: Action, now: Date) -> Bool {
         guard let due = dueDate(action) else { return false }
         return due < now
+    }
+
+    static var deviceLabel: String {
+        UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
     }
 }
 

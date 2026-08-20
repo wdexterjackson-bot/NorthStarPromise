@@ -1,5 +1,6 @@
 import NSPDesignSystem
 import SwiftUI
+import UIKit
 
 /// docs/07 §4's "Active session view": elapsed time, a live input-level
 /// meter, Marker/Pause/Stop, and capture-device attribution. A live
@@ -39,7 +40,7 @@ struct ActiveSessionCard: View {
             NSPLevelMeter(level: session.inputLevel)
 
             HStack(spacing: NSPSpacing.medium) {
-                Label("Recording on this iPhone", systemImage: "iphone")
+                Label("Recording on this \(TodayView.deviceLabel)", systemImage: "iphone")
                 if session.markerCount > 0 {
                     Button {
                         isShowingMarkers = true

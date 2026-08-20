@@ -10,6 +10,12 @@ import SwiftUI
 @MainActor
 struct ActionsView: View {
     let environment: AppEnvironment
+    /// When set (iPad), tapping an action's row calls this with its
+    /// meeting instead of pushing — see `TodayView.onSelectMeeting`'s doc
+    /// comment for the full reasoning. `ActionRowCard` itself has no
+    /// navigation; this only affects the tap-to-open-meeting affordance
+    /// this view wraps each row in below.
+    var onSelectMeeting: ((MeetingID) -> Void)?
 
     @State private var actions: [Action] = []
     @State private var meetingTitles: [MeetingID: String] = [:]
@@ -50,6 +56,9 @@ struct ActionsView: View {
                 }
             }
             .navigationTitle("Actions")
+            .navigationDestination(for: MeetingID.self) { meetingID in
+                MeetingDetailView(meetingID: meetingID, environment: environment)
+            }
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     if isSelecting {
@@ -91,12 +100,25 @@ struct ActionsView: View {
                 .foregroundStyle(status.tint)
 
             ForEach(actions) { action in
-                ActionRowCard(
+                let card = ActionRowCard(
                     action: action, environment: environment, onChanged: apply, onSendRequested: { sendTarget = $0 },
                     showsSelection: isSelecting && status == .proposed,
                     isSelected: selectedIDs.contains(action.actionID),
                     onToggleSelection: { toggleSelection(action.actionID) },
                     meetingTitle: meetingTitles[action.meetingID])
+                if isSelecting {
+                    card
+                } else if let onSelectMeeting {
+                    Button {
+                        onSelectMeeting(action.meetingID)
+                    } label: {
+                        card
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    NavigationLink(value: action.meetingID) { card }
+                        .buttonStyle(.plain)
+                }
             }
         }
     }

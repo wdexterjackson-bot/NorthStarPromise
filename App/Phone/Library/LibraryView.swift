@@ -11,6 +11,9 @@ import SwiftUI
 @MainActor
 struct LibraryView: View {
     let environment: AppEnvironment
+    /// When set (iPad), tapping a meeting calls this instead of pushing —
+    /// see `TodayView.onSelectMeeting`'s doc comment for the full reasoning.
+    var onSelectMeeting: ((MeetingID) -> Void)?
 
     /// A coarse grouping of `MeetingState` — the full 19-case vocabulary
     /// isn't a useful filter surface, but "what stage is this meeting at"
@@ -70,7 +73,7 @@ struct LibraryView: View {
                             .listRowSeparator(.hidden)
                             .listRowBackground(Color.clear)
                         ForEach(filteredMeetings) { meeting in
-                            NavigationLink(value: meeting.meetingID) {
+                            meetingLink(meeting.meetingID) {
                                 MeetingRow(meeting: meeting).nspCard()
                             }
                             .listRowInsets(
@@ -138,6 +141,20 @@ struct LibraryView: View {
                 }
             }
             .padding(.vertical, NSPSpacing.extraSmall)
+        }
+    }
+
+    @ViewBuilder
+    private func meetingLink<Label: View>(_ meetingID: MeetingID, @ViewBuilder label: () -> Label) -> some View {
+        if let onSelectMeeting {
+            Button {
+                onSelectMeeting(meetingID)
+            } label: {
+                label()
+            }
+            .buttonStyle(.plain)
+        } else {
+            NavigationLink(value: meetingID) { label() }
         }
     }
 

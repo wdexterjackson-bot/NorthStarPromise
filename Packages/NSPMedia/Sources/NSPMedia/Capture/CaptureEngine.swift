@@ -28,6 +28,7 @@ public actor CaptureEngine {
     private var drainTask: Task<Void, Never>?
     private var isCapturing = false
     private var isPaused = false
+    private var resolvedFormat: SegmentAudioFormat?
 
     /// Immutable and internally thread-safe (`AudioLevelMeter`'s own
     /// doc comment explains why), so it's exposed `nonisolated` — the UI
@@ -65,6 +66,7 @@ public actor CaptureEngine {
             throw CaptureEngineError.backendFailure("\(error)")
         }
 
+        resolvedFormat = format
         let segmenter = makeSegmenter(format)
         self.segmenter = segmenter
         try await segmenter.beginRecording()
@@ -105,6 +107,20 @@ public actor CaptureEngine {
     public func addMarker(kind: MarkerKind) async throws -> Int64 {
         guard isCapturing, let segmenter else { throw CaptureEngineError.notCapturing }
         return try await segmenter.addMarker(kind: kind)
+    }
+
+    /// `nil` when nothing is capturing — see `Segmenter.currentSampleOffset()`.
+    public func currentSampleOffset() async -> Int64? {
+        guard isCapturing, let segmenter else { return nil }
+        return await segmenter.currentSampleOffset()
+    }
+
+    /// The real, hardware-resolved format `start()` settled on — `nil`
+    /// before the first `start()`. Lets a caller convert a persisted
+    /// sample offset back into seconds without re-deriving or guessing a
+    /// rate (docs/07 §5's iPad canvas restores lines this way).
+    public func resolvedAudioFormat() -> SegmentAudioFormat? {
+        resolvedFormat
     }
 
     /// Route change (docs/03 §2.3) — forwarded from whatever observes
