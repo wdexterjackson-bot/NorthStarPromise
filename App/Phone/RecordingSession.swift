@@ -1,6 +1,7 @@
 import Foundation
 import NSPCore
 import NSPMedia
+import NSPPersistence
 import Observation
 
 /// Owns one active capture session's UI-facing state (docs/07 §4's
@@ -18,6 +19,11 @@ import Observation
 public final class RecordingSession {
     public enum State: Equatable {
         case idle
+        /// A `Meeting` row exists (`meetingID` is real, notes can persist)
+        /// but no capture engine has started — iPad's "write a pre-brief
+        /// before recording" flow (docs/07 §5, `prepareDraft`). `start()`
+        /// promotes a draft in place rather than creating a second meeting.
+        case draft
         case arming
         case recording
         case paused
@@ -42,6 +48,12 @@ public final class RecordingSession {
     public private(set) var markers: [SessionMarker] = []
     public var markerCount: Int { markers.count }
     public private(set) var meetingID: MeetingID?
+    /// The active meeting's on-disk layout — `nil` outside an active
+    /// session. iPad's ink canvas (`PadRecordingCanvas`) needs
+    /// `inkDirectoryURL` to write `.drawing` assets; nothing else reads
+    /// this today, but it's the same container `makeCaptureEngine` already
+    /// built, just retained instead of staying a local to `start()`.
+    public private(set) var meetingContainer: MeetingContainer?
     /// Set right after a successful `stop()` when calendar sync is on and
     /// a destination calendar is chosen — `TodayView` shows
     /// `CalendarEventConfirmationView` while this is non-nil. Never set
@@ -63,8 +75,36 @@ public final class RecordingSession {
         self.environment = environment
     }
 
+    /// Creates a real `Meeting` row and publishes `meetingID` immediately,
+    /// without starting capture — iPad's pre-recording note-taking flow
+    /// (docs/07 §5: "notes taken before recording starts"). `start()` later
+    /// promotes this same meeting in place rather than creating a second
+    /// one. Returns `nil` (leaving state untouched) if setup isn't ready.
+    public func prepareDraft(title: String = "Untitled meeting") async -> MeetingID? {
+        guard state == .idle, let policy = environment.defaultPolicy else { return nil }
+
+        let newMeetingID = MeetingID(rawValue: UUID())
+        let now = environment.clock.now()
+        let meeting = Meeting(
+            meetingID: newMeetingID, workspaceID: policy.workspaceID, title: title, captureMode: .phone,
+            originDeviceID: environment.deviceID, startedAt: now, lifecycleState: .ready, policyID: policy.policyID,
+            processingMode: policy.defaultProcessingMode, availability: .complete, createdAt: now, updatedAt: now)
+
+        do {
+            try await environment.meetingRepository.insert(meeting, at: now)
+            meetingContainer = try environment.makeMeetingContainer(meetingID: newMeetingID)
+            meetingID = newMeetingID
+            state = .draft
+            return newMeetingID
+        } catch {
+            state = .failed(Self.describeFailure(error))
+            return nil
+        }
+    }
+
     public func start() async {
-        guard state == .idle else { return }
+        guard state == .idle || state == .draft else { return }
+        let draftMeetingID = state == .draft ? meetingID : nil
         state = .arming
 
         guard let policy = environment.defaultPolicy else {
@@ -72,19 +112,34 @@ public final class RecordingSession {
             return
         }
 
-        let newMeetingID = MeetingID(rawValue: UUID())
-        let now = environment.clock.now()
-        let meeting = Meeting(
-            meetingID: newMeetingID, workspaceID: policy.workspaceID, title: "Untitled meeting",
-            captureMode: .phone, originDeviceID: environment.deviceID, startedAt: now, lifecycleState: .arming,
-            policyID: policy.policyID, processingMode: policy.defaultProcessingMode, availability: .complete,
-            createdAt: now, updatedAt: now)
-
         do {
-            try await environment.meetingRepository.insert(meeting, at: now)
-            let container = try environment.makeMeetingContainer(meetingID: newMeetingID)
-            let engine = environment.makeCaptureEngine(meetingID: newMeetingID, container: container)
+            let meeting: Meeting
+            let container: MeetingContainer
+            let fetchedDraft = try await Self.findDraft(draftMeetingID, in: environment.meetingRepository)
+            if let draftContainer = meetingContainer, var draftMeeting = fetchedDraft {
+                // Promote the draft in place — same meeting, same
+                // container, so pre-recording notes stay attached rather
+                // than orphaned under a discarded meetingID.
+                draftMeeting.lifecycleState = .arming
+                try await environment.meetingRepository.update(draftMeeting, at: environment.clock.now())
+                meeting = draftMeeting
+                container = draftContainer
+            } else {
+                let newMeetingID = MeetingID(rawValue: UUID())
+                let now = environment.clock.now()
+                let newMeeting = Meeting(
+                    meetingID: newMeetingID, workspaceID: policy.workspaceID, title: "Untitled meeting",
+                    captureMode: .phone, originDeviceID: environment.deviceID, startedAt: now, lifecycleState: .arming,
+                    policyID: policy.policyID, processingMode: policy.defaultProcessingMode, availability: .complete,
+                    createdAt: now, updatedAt: now)
+                try await environment.meetingRepository.insert(newMeeting, at: now)
+                meeting = newMeeting
+                container = try environment.makeMeetingContainer(meetingID: newMeetingID)
+            }
+
+            let engine = environment.makeCaptureEngine(meetingID: meeting.meetingID, container: container)
             captureEngine = engine
+            meetingContainer = container
 
             // Returns only after the durable write (I1) — nothing above
             // this line has said "Recording," and nothing below needed to.
@@ -94,7 +149,7 @@ public final class RecordingSession {
             recordingMeeting.lifecycleState = .recording
             try await environment.meetingRepository.update(recordingMeeting, at: environment.clock.now())
 
-            meetingID = newMeetingID
+            meetingID = meeting.meetingID
             state = .recording
             startElapsedTimer(from: Date())
         } catch {
@@ -270,8 +325,16 @@ public final class RecordingSession {
         elapsedSeconds = 0
         markers = []
         meetingID = nil
+        meetingContainer = nil
         captureEngine = nil
         inputLevel = 0
+    }
+
+    private static func findDraft(
+        _ meetingID: MeetingID?, in repository: any MeetingRepository
+    ) async throws -> Meeting? {
+        guard let meetingID else { return nil }
+        return try await repository.find(meetingID)
     }
 
     private static func describeFailure(_ error: Error) -> String {

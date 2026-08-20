@@ -22,13 +22,14 @@ struct PadRootView: View {
         self._recordingSession = State(initialValue: RecordingSession(environment: environment))
     }
 
-    /// Whether `selectedMeetingID` is the meeting `recordingSession` is
-    /// actively capturing right now — the one case the detail column shows
-    /// the ruled-paper canvas instead of the regular tabbed detail.
+    /// Whether `selectedMeetingID` is the meeting `recordingSession` owns
+    /// right now — either actively capturing, or a pre-recording draft
+    /// (docs/07 §5) — the cases where the detail column shows the
+    /// ruled-paper canvas instead of the regular tabbed detail.
     private var isRecordingSelectedMeeting: Bool {
         guard let selectedMeetingID, selectedMeetingID == recordingSession.meetingID else { return false }
         return recordingSession.state == .recording || recordingSession.state == .paused
-            || recordingSession.state == .arming
+            || recordingSession.state == .arming || recordingSession.state == .draft
     }
 
     var body: some View {

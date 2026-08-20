@@ -21,14 +21,38 @@ struct PadCanvasHeader: View {
     }
 
     private var isPaused: Bool { session.state == .paused }
+    private var isDrafting: Bool { session.state == .draft }
 
     var body: some View {
         VStack(spacing: NSPSpacing.small) {
-            recordingControls
+            if isDrafting {
+                draftingControls
+            } else {
+                recordingControls
+            }
             toolPalette
         }
         .padding(NSPSpacing.medium)
         .background(Self.backgroundColor)
+    }
+
+    /// Pre-recording (docs/07 §5): no elapsed time or level meter to show,
+    /// no Marker/Pause since nothing is capturing yet — just a way to
+    /// start recording the notes already on the page.
+    private var draftingControls: some View {
+        HStack(spacing: NSPSpacing.large) {
+            NSPStatusBadge(symbolName: "square.and.pencil", label: "Drafting Notes", tint: NSPColor.accent)
+
+            Spacer()
+
+            Button {
+                Task { await session.start() }
+            } label: {
+                Label("Start Recording", systemImage: "record.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.white)
+        }
     }
 
     private var recordingControls: some View {

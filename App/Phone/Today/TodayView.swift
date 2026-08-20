@@ -117,7 +117,14 @@ struct TodayView: View {
     private var nowSection: some View {
         switch session.state {
         case .idle:
-            startRecordingCard
+            VStack(spacing: NSPSpacing.medium) {
+                startRecordingCard
+                if onSelectMeeting != nil {
+                    NewNoteButton(session: session)
+                }
+            }
+        case .draft:
+            DraftingNotesCard(session: session, onSelectMeeting: onSelectMeeting)
         case .arming:
             centeredStatusCard(message: "Preparing…")
         case .recording, .paused:
@@ -277,6 +284,51 @@ struct TodayView: View {
 
     static var deviceLabel: String {
         UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
+    }
+}
+
+/// iPad only — creates a real, notes-capable meeting before recording
+/// starts (docs/07 §5's pre-brief flow). `PadRootView` auto-selects it the
+/// moment `session.meetingID` publishes, so no explicit navigation call is
+/// needed here.
+private struct NewNoteButton: View {
+    let session: RecordingSession
+
+    var body: some View {
+        Button {
+            Task { await session.prepareDraft() }
+        } label: {
+            Label("New Note (before recording)", systemImage: "square.and.pencil")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+    }
+}
+
+/// Shown on Today while a pre-recording draft meeting exists (docs/07 §5)
+/// — notes are already being saved; recording can start whenever the user
+/// is ready.
+private struct DraftingNotesCard: View {
+    let session: RecordingSession
+    let onSelectMeeting: ((MeetingID) -> Void)?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+            NSPStatusBadge(symbolName: "square.and.pencil", label: "Drafting Notes", tint: NSPColor.accent)
+            Text("Notes are saved — start recording whenever you're ready.")
+                .font(.callout)
+                .foregroundStyle(NSPColor.secondaryText)
+            HStack(spacing: NSPSpacing.medium) {
+                if let onSelectMeeting, let meetingID = session.meetingID {
+                    Button("Open Notes") { onSelectMeeting(meetingID) }
+                        .buttonStyle(.bordered)
+                }
+                Button("Start Recording") { Task { await session.start() } }
+                    .buttonStyle(.borderedProminent)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .nspCard()
     }
 }
 

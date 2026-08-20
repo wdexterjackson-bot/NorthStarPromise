@@ -27,6 +27,7 @@ public final class AppEnvironment {
     public let personRepository: any PersonRepository
     public let actionRepository: any ActionRepository
     public let calendarEventWriter: any CalendarEventWriter
+    public let inkAssetFileSystem: any InkAssetFileSystem
 
     public let containerRootURL: URL
     public let deviceID: DeviceID
@@ -81,6 +82,7 @@ public final class AppEnvironment {
         self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
         self.actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
         self.calendarEventWriter = EventKitCalendarEventWriter()
+        self.inkAssetFileSystem = LiveInkAssetFileSystem()
         self.containerRootURL = appSupportURL
         self.deviceID = Self.loadOrCreateDeviceID()
         self.clock = SystemClock()
