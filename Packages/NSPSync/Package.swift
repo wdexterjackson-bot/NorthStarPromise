@@ -9,6 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../NSPCore"),
+        .package(path: "../NSPPersistence"),
         .package(path: "../NSPPolicy"),
         .package(path: "../NSPTransfer"),
     ],
@@ -17,6 +18,7 @@ let package = Package(
             name: "NSPSync",
             dependencies: [
                 .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "NSPPersistence", package: "NSPPersistence"),
                 .product(name: "NSPPolicy", package: "NSPPolicy"),
                 .product(name: "NSPTransfer", package: "NSPTransfer"),
             ],

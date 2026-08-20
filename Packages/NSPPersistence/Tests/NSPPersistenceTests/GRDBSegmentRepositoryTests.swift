@@ -117,4 +117,37 @@ struct GRDBSegmentRepositoryTests {
         let all = try await repository.fetchAll(meetingID: meetingID)
         #expect(all.map(\.sequence) == [0, 1, 2])
     }
+
+    @Test func test_findUploaded_matchesOnlyASegmentWithBothTheHashAndACloudAssetRef() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let meetingID = MeetingID(rawValue: UUID(uuidString: "aaaaaaaa-0000-7000-8000-000000000000")!)
+        try await Self.makeMeetingGraph(appDatabase, meetingID: meetingID)
+
+        let repository = GRDBSegmentRepository(dbWriter: appDatabase.dbWriter)
+        let sharedHash = Data(repeating: 0xAB, count: 32)
+
+        var notYetUploaded = Self.makeSegment(meetingID: meetingID, sequence: 0)
+        notYetUploaded.sha256 = sharedHash
+        try await repository.insert(notYetUploaded, at: Date())
+
+        var uploaded = Self.makeSegment(meetingID: meetingID, sequence: 1)
+        uploaded.sha256 = sharedHash
+        uploaded.cloudAssetRef = "record-name-abc"
+        try await repository.insert(uploaded, at: Date())
+
+        let found = try await repository.findUploaded(sha256: sharedHash)
+        #expect(found?.segmentID == uploaded.segmentID)
+    }
+
+    @Test func test_findUploaded_returnsNilWhenNoSegmentHasThatHash() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let meetingID = MeetingID(rawValue: UUID(uuidString: "aaaaaaaa-0000-7000-8000-000000000000")!)
+        try await Self.makeMeetingGraph(appDatabase, meetingID: meetingID)
+
+        let repository = GRDBSegmentRepository(dbWriter: appDatabase.dbWriter)
+        try await repository.insert(Self.makeSegment(meetingID: meetingID, sequence: 0), at: Date())
+
+        let found = try await repository.findUploaded(sha256: Data(repeating: 0xFF, count: 32))
+        #expect(found == nil)
+    }
 }

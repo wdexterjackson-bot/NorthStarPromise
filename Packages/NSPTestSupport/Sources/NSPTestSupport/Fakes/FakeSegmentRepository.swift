@@ -29,4 +29,8 @@ public actor FakeSegmentRepository: SegmentRepository {
             .filter { $0.meetingID == meetingID }
             .sorted { $0.sequence < $1.sequence }
     }
+
+    public func findUploaded(sha256: Data) async throws -> Segment? {
+        storage.values.first { $0.sha256 == sha256 && $0.cloudAssetRef != nil }
+    }
 }

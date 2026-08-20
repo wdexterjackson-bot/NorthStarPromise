@@ -9,6 +9,13 @@ public protocol SegmentRepository: Sendable {
     func update(_ segment: Segment, at date: Date) async throws
     func find(_ id: SegmentID) async throws -> Segment?
     func fetchAll(meetingID: MeetingID) async throws -> [Segment]
+
+    /// The dedupe lookup behind "a duplicate upload collapses to the
+    /// existing asset" (docs/02 §6, NSP-035): a previously uploaded segment
+    /// sharing this content hash, if one exists. Only segments that already
+    /// carry a `cloudAssetRef` are candidates — a hash match against a
+    /// not-yet-uploaded segment isn't something to dedupe against.
+    func findUploaded(sha256: Data) async throws -> Segment?
 }
 
 public struct GRDBSegmentRepository: SegmentRepository {
@@ -58,5 +65,16 @@ public struct GRDBSegmentRepository: SegmentRepository {
                 .fetchAll(db)
         }
         return try rows.map { try $0.asDomain() }
+    }
+
+    public func findUploaded(sha256: Data) async throws -> Segment? {
+        let hex = sha256.map { String(format: "%02x", $0) }.joined()
+        let row = try await dbWriter.read { db in
+            try SegmentRow
+                .filter(Column("sha256") == hex)
+                .filter(Column("cloud_asset_ref") != nil)
+                .fetchOne(db)
+        }
+        return try row.map { try $0.asDomain() }
     }
 }
