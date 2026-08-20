@@ -5,6 +5,11 @@ import Foundation
 public protocol ContainerFileSystem: Sendable {
     func createDirectory(at url: URL, protection: DataProtectionClass) throws
     func fileExists(at url: URL) -> Bool
+    /// Removes a meeting's whole on-disk directory tree — segments, ink,
+    /// attachments, derived files — after its DB rows are already gone
+    /// (meeting deletion; the DB delete, not this, is the source of truth
+    /// for "the meeting is gone"). A no-op if nothing exists at `url`.
+    func removeDirectory(at url: URL) throws
 }
 
 /// The real filesystem, backed by `FileManager`. Sets Data Protection via
@@ -25,5 +30,10 @@ public struct LiveContainerFileSystem: ContainerFileSystem {
 
     public func fileExists(at url: URL) -> Bool {
         FileManager.default.fileExists(atPath: url.path)
+    }
+
+    public func removeDirectory(at url: URL) throws {
+        guard fileExists(at: url) else { return }
+        try FileManager.default.removeItem(at: url)
     }
 }

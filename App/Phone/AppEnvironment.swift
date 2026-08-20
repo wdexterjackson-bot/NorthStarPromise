@@ -1,19 +1,16 @@
 import Foundation
 import NSPActions
 import NSPCore
+import NSPIntelligence
 import NSPMedia
 import NSPPersistence
+import NSPPolicy
 import Observation
 
 /// The app's composition root — construction and wiring only, no
 /// business logic (`CLAUDE.md` §3: "app targets contain no business
 /// logic"). Every screen reads its dependencies from this one place
 /// rather than constructing its own database connection or repository.
-///
-/// `NetworkGate` isn't wired here yet: nothing in this pass calls it —
-/// recording is purely local (I1/I2 concerns), and CloudKit sync isn't
-/// connected to any screen yet. Wiring it in is a fast follow, not a
-/// deferred requirement of anything built so far.
 @MainActor
 @Observable
 public final class AppEnvironment {
@@ -26,8 +23,18 @@ public final class AppEnvironment {
     public let workspaceRepository: any WorkspaceRepository
     public let personRepository: any PersonRepository
     public let actionRepository: any ActionRepository
+    public let consentRecordRepository: any ConsentRecordRepository
+    public let auditEventRepository: any AuditEventRepository
+    public let transcriptTurnRepository: any TranscriptTurnRepository
+    public let insightRepository: any InsightRepository
     public let calendarEventWriter: any CalendarEventWriter
     public let inkAssetFileSystem: any InkAssetFileSystem
+    /// The single I5 choke point (docs/06 §2) — every `NSPSync` write
+    /// already calls this internally; `syncCoordinator` below is the only
+    /// thing in `App/Phone` that needs it directly.
+    public let networkGate: any NetworkGate
+    public let syncCoordinator: AppSyncCoordinator
+    public let intelligenceCoordinator: IntelligenceCoordinator
 
     public let containerRootURL: URL
     public let deviceID: DeviceID
@@ -72,22 +79,57 @@ public final class AppEnvironment {
         let dbURL = appSupportURL.appendingPathComponent("NorthStar.sqlite")
         let appDatabase = try AppDatabase(path: dbURL.path)
 
+        let meetingRepository = GRDBMeetingRepository(dbWriter: appDatabase.dbWriter)
+        let segmentRepository = GRDBSegmentRepository(dbWriter: appDatabase.dbWriter)
+        let policyRepository = GRDBPolicyRepository(dbWriter: appDatabase.dbWriter)
+        let consentRecordRepository = GRDBConsentRecordRepository(dbWriter: appDatabase.dbWriter)
+        let auditEventRepository = GRDBAuditEventRepository(dbWriter: appDatabase.dbWriter)
+        let transcriptTurnRepository = GRDBTranscriptTurnRepository(dbWriter: appDatabase.dbWriter)
+        let insightRepository = GRDBInsightRepository(dbWriter: appDatabase.dbWriter)
+        let actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+        let clock = SystemClock()
+
+        let networkGate = DefaultNetworkGate(
+            auditRecorder: PersistedAuditEventRecorder(repository: auditEventRepository, clock: clock),
+            consentLookup: PersistedConsentRecordLookup(repository: consentRecordRepository),
+            policyLookup: PersistedPolicySnapshotLookup(
+                meetingRepository: meetingRepository, policyRepository: policyRepository))
+
         self.appDatabase = appDatabase
-        self.meetingRepository = GRDBMeetingRepository(dbWriter: appDatabase.dbWriter)
-        self.segmentRepository = GRDBSegmentRepository(dbWriter: appDatabase.dbWriter)
+        self.meetingRepository = meetingRepository
+        self.segmentRepository = segmentRepository
         self.timelineEventRepository = GRDBTimelineEventRepository(dbWriter: appDatabase.dbWriter)
         self.noteBlockRepository = GRDBNoteBlockRepository(dbWriter: appDatabase.dbWriter)
-        self.policyRepository = GRDBPolicyRepository(dbWriter: appDatabase.dbWriter)
+        self.policyRepository = policyRepository
         self.workspaceRepository = GRDBWorkspaceRepository(dbWriter: appDatabase.dbWriter)
         self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
-        self.actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+        self.actionRepository = actionRepository
+        self.consentRecordRepository = consentRecordRepository
+        self.auditEventRepository = auditEventRepository
+        self.transcriptTurnRepository = transcriptTurnRepository
+        self.insightRepository = insightRepository
         self.calendarEventWriter = EventKitCalendarEventWriter()
         self.inkAssetFileSystem = LiveInkAssetFileSystem()
+        self.networkGate = networkGate
+        self.syncCoordinator = AppSyncCoordinator(
+            networkGate: networkGate, meetingRepository: meetingRepository, segmentRepository: segmentRepository)
+        self.intelligenceCoordinator = IntelligenceCoordinator(
+            segmentRepository: segmentRepository, transcriptTurnRepository: transcriptTurnRepository,
+            insightRepository: insightRepository, actionRepository: actionRepository,
+            meetingRepository: meetingRepository, clock: clock)
         self.containerRootURL = appSupportURL
         self.deviceID = Self.loadOrCreateDeviceID()
-        self.clock = SystemClock()
+        self.clock = clock
         self.calendarSyncEnabled = UserDefaults.standard.bool(forKey: Self.calendarSyncEnabledKey)
         self.selectedCalendarIdentifier = UserDefaults.standard.string(forKey: Self.selectedCalendarIdentifierKey)
+    }
+
+    /// Updates the published `defaultPolicy` after a caller has already
+    /// persisted a change to it (e.g. Settings' "Sync to iCloud" toggle) —
+    /// this only refreshes in-memory state for observers, it doesn't write
+    /// anything itself.
+    public func refreshDefaultPolicy(_ policy: Policy) {
+        defaultPolicy = policy
     }
 
     /// Ensures `defaultPolicy` is set, creating the one local workspace and
@@ -137,6 +179,22 @@ public final class AppEnvironment {
         let container = MeetingContainer(appContainerURL: containerRootURL, meetingID: meetingID)
         try container.ensureDirectoryStructure(using: LiveContainerFileSystem())
         return container
+    }
+
+    /// Deletes a meeting outright: the DB row first (cascades every child
+    /// row — segments, notes, transcript, insights, actions, evidence —
+    /// per `MeetingRepository.delete`'s doc comment), then its on-disk
+    /// directory. DB delete first, disk cleanup second, and disk cleanup
+    /// failure is non-fatal (`try?`, same as `CaptureEngine.stop()`'s own
+    /// non-fatal `deactivateSession` cleanup) — by the time disk cleanup
+    /// runs the meeting is already gone from every list, so a failure there
+    /// is an orphaned-file storage leak, not a correctness problem worth
+    /// surfacing as "delete failed" when the delete the user asked for
+    /// already succeeded.
+    public func deleteMeeting(_ meetingID: MeetingID) async throws {
+        try await meetingRepository.delete(meetingID)
+        let container = MeetingContainer(appContainerURL: containerRootURL, meetingID: meetingID)
+        try? LiveContainerFileSystem().removeDirectory(at: container.rootURL)
     }
 
     /// Builds a `CaptureEngine` wired to real capture (`AVAudioEngine`),

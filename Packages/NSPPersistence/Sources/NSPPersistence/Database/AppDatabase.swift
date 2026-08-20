@@ -28,7 +28,8 @@ public struct AppDatabase: Sendable {
     /// data, not shared mutable state — Swift 6 flags `any P.Type` arrays
     /// regardless. NSP-011.
     nonisolated(unsafe) static let allMigrations: [SchemaMigration.Type] = [
-        Migration001InitialSchema.self
+        Migration001InitialSchema.self,
+        Migration002AddMeetingSubtitle.self,
     ]
 
     public static var migrator: DatabaseMigrator {

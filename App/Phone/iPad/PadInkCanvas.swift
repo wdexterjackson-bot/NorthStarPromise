@@ -5,10 +5,13 @@ import SwiftUI
 /// `isUserInteractionEnabled` rather than relying solely on the SwiftUI
 /// `.allowsHitTesting` the parent already applies, so the underlying
 /// `PKCanvasView` never captures touches meant for the text layer beneath
-/// it even if hit-testing is ever restructured.
+/// it even if hit-testing is ever restructured. `tool` is computed by the
+/// parent from the active palette selection + chosen colour (docs/07 §5:
+/// pen in black or green, highlighter in yellow).
 struct PadInkCanvas: UIViewRepresentable {
     @Binding var drawing: PKDrawing
     var isActive: Bool
+    var tool: PKTool
     var onDrawingChanged: (PKDrawing) -> Void
 
     func makeUIView(context: Context) -> PKCanvasView {
@@ -17,7 +20,7 @@ struct PadInkCanvas: UIViewRepresentable {
         canvasView.drawingPolicy = .anyInput
         canvasView.backgroundColor = .clear
         canvasView.isOpaque = false
-        canvasView.tool = PKInkingTool(.pen, color: .black, width: 3)
+        canvasView.tool = tool
         canvasView.drawing = drawing
         canvasView.isUserInteractionEnabled = isActive
         return canvasView
@@ -25,6 +28,7 @@ struct PadInkCanvas: UIViewRepresentable {
 
     func updateUIView(_ canvasView: PKCanvasView, context: Context) {
         canvasView.isUserInteractionEnabled = isActive
+        canvasView.tool = tool
         if canvasView.drawing != drawing {
             canvasView.drawing = drawing
         }

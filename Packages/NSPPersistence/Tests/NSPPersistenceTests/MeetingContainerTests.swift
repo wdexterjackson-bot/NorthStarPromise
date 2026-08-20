@@ -16,6 +16,10 @@ private final class TestFakeContainerFileSystem: ContainerFileSystem, @unchecked
     func fileExists(at url: URL) -> Bool {
         createdDirectories[url] != nil
     }
+
+    func removeDirectory(at url: URL) throws {
+        createdDirectories.removeValue(forKey: url)
+    }
 }
 
 @Suite("MeetingContainer")

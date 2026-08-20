@@ -24,11 +24,9 @@ private final class FakeCaptureBackend: CaptureBackend, @unchecked Sendable {
         self.shouldFailActivation = shouldFailActivation
     }
 
-    func activateSession(preferredSampleRate: Double) throws {
+    func activateSession(preferredSampleRate: Double) async throws {
         if shouldFailActivation { throw CaptureBackendError.sessionActivationFailed("fixture") }
-        lock.lock()
-        activateCallCount += 1
-        lock.unlock()
+        lock.withLock { activateCallCount += 1 }
     }
 
     func deactivateSession() throws {

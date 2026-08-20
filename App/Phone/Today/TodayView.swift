@@ -89,18 +89,7 @@ struct TodayView: View {
             .task { await load() }
             .refreshable { await load() }
         }
-        .sheet(
-            item: Binding(
-                get: { session.pendingCalendarMeeting },
-                set: { newValue in if newValue == nil { session.dismissCalendarPrompt() } })
-        ) { meeting in
-            CalendarEventConfirmationView(
-                meeting: meeting, environment: environment,
-                onDone: {
-                    session.dismissCalendarPrompt()
-                    Task { await load() }
-                })
-        }
+        .modifier(TodayPromptSheets(session: session, environment: environment, onDismiss: load))
     }
 
     private var statsStrip: some View {
@@ -186,7 +175,8 @@ struct TodayView: View {
                 Text("Needs Review").font(.title3.weight(.bold))
                 ForEach(needsReview) { meeting in
                     meetingLink(meeting.meetingID) {
-                        MeetingRow(meeting: meeting).nspCard()
+                        MeetingRow(meeting: meeting, onDelete: { Task { await deleteMeeting(meeting.meetingID) } })
+                            .nspCard()
                     }
                 }
             }
@@ -205,7 +195,8 @@ struct TodayView: View {
                     meetingLink(action.meetingID) {
                         DashboardActionRow(
                             action: action, meetingTitle: meetingTitles[action.meetingID] ?? "Untitled meeting",
-                            isOverdue: Self.isOverdue(action, now: environment.clock.now()))
+                            isOverdue: Self.isOverdue(action, now: environment.clock.now()),
+                            onDelete: { Task { await deleteAction(action.actionID) } })
                     }
                 }
             }
@@ -224,7 +215,8 @@ struct TodayView: View {
                 sectionHeader("Library", seeAllTab: .library)
                 ForEach(recent.prefix(Self.maxLibraryRows)) { meeting in
                     meetingLink(meeting.meetingID) {
-                        MeetingRow(meeting: meeting).nspCard()
+                        MeetingRow(meeting: meeting, onDelete: { Task { await deleteMeeting(meeting.meetingID) } })
+                            .nspCard()
                     }
                 }
             }
@@ -270,6 +262,24 @@ struct TodayView: View {
         }
     }
 
+    private func deleteMeeting(_ meetingID: MeetingID) async {
+        do {
+            try await environment.deleteMeeting(meetingID)
+            await load()
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
+    private func deleteAction(_ actionID: ActionID) async {
+        do {
+            try await environment.actionRepository.delete(actionID)
+            await load()
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
     private static func dueDate(_ action: Action) -> Date? {
         switch action.date {
         case .explicit(let date), .inferred(let date): return date
@@ -284,117 +294,5 @@ struct TodayView: View {
 
     static var deviceLabel: String {
         UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone"
-    }
-}
-
-/// iPad only — creates a real, notes-capable meeting before recording
-/// starts (docs/07 §5's pre-brief flow). `PadRootView` auto-selects it the
-/// moment `session.meetingID` publishes, so no explicit navigation call is
-/// needed here.
-private struct NewNoteButton: View {
-    let session: RecordingSession
-
-    var body: some View {
-        Button {
-            Task { await session.prepareDraft() }
-        } label: {
-            Label("New Note (before recording)", systemImage: "square.and.pencil")
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
-    }
-}
-
-/// Shown on Today while a pre-recording draft meeting exists (docs/07 §5)
-/// — notes are already being saved; recording can start whenever the user
-/// is ready.
-private struct DraftingNotesCard: View {
-    let session: RecordingSession
-    let onSelectMeeting: ((MeetingID) -> Void)?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: NSPSpacing.medium) {
-            NSPStatusBadge(symbolName: "square.and.pencil", label: "Drafting Notes", tint: NSPColor.accent)
-            Text("Notes are saved — start recording whenever you're ready.")
-                .font(.callout)
-                .foregroundStyle(NSPColor.secondaryText)
-            HStack(spacing: NSPSpacing.medium) {
-                if let onSelectMeeting, let meetingID = session.meetingID {
-                    Button("Open Notes") { onSelectMeeting(meetingID) }
-                        .buttonStyle(.bordered)
-                }
-                Button("Start Recording") { Task { await session.start() } }
-                    .buttonStyle(.borderedProminent)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .nspCard()
-    }
-}
-
-/// A compact glanceable stat — "N meetings this week," "N open actions."
-private struct DashboardStatChip: View {
-    let value: String
-    let label: String
-    let tint: Color
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.title2.weight(.bold)).foregroundStyle(tint)
-            Text(label).font(.caption2).foregroundStyle(NSPColor.secondaryText)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(NSPSpacing.medium)
-        .background(NSPColor.cardBackground, in: .rect(cornerRadius: 12, style: .continuous))
-    }
-}
-
-/// A cross-meeting action row for the dashboard — lighter than
-/// `ActionRowCard` (no status-transition menu here; full management stays
-/// in the Actions tab) since this view exists to answer "what's open and
-/// where did it come from," not to manage every action inline.
-private struct DashboardActionRow: View {
-    let action: Action
-    let meetingTitle: String
-    let isOverdue: Bool
-
-    private var dueLabel: String? {
-        switch action.date {
-        case .explicit(let date): return date.formatted(date: .abbreviated, time: .omitted)
-        case .inferred(let date): return "\(date.formatted(date: .abbreviated, time: .omitted)) (inferred)"
-        case .unresolved: return nil
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: NSPSpacing.medium) {
-            NSPIconBadge(
-                symbolName: action.status.symbolName, tint: isOverdue ? NSPColor.statusDanger : action.status.tint)
-
-            VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
-                Text(action.text).font(.body.weight(.medium)).lineLimit(2)
-                HStack(spacing: NSPSpacing.extraSmall) {
-                    Text(meetingTitle)
-                    if let dueLabel {
-                        Text("·")
-                        Text(dueLabel)
-                    }
-                }
-                .font(.caption)
-                .foregroundStyle(isOverdue ? NSPColor.statusDanger : NSPColor.secondaryText)
-            }
-
-            Spacer(minLength: 0)
-
-            if isOverdue {
-                Text("Overdue")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, NSPSpacing.small)
-                    .padding(.vertical, 4)
-                    .background(NSPColor.statusDanger, in: .capsule)
-            }
-        }
-        .nspCard()
     }
 }

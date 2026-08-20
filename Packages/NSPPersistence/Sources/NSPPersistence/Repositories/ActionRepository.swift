@@ -29,6 +29,8 @@ public struct GRDBActionRepository: ActionRepository {
         try await dbWriter.write { db in
             try row.insert(db)
             try Self.replaceAuditTrail(action.auditTrail, actionID: row.actionID, in: db)
+            try EvidenceSpanPersistence.sync(
+                db, owner: .action(row.actionID), meetingID: row.meetingID, spans: action.evidence)
         }
     }
 
@@ -42,13 +44,17 @@ public struct GRDBActionRepository: ActionRepository {
                 action: action, createdAt: existing.createdAt, updatedAt: date, rowRevision: existing.rowRevision + 1)
             try updated.update(db)
             try Self.replaceAuditTrail(action.auditTrail, actionID: actionID, in: db)
+            try EvidenceSpanPersistence.sync(
+                db, owner: .action(actionID), meetingID: updated.meetingID, spans: action.evidence)
         }
     }
 
     public func find(_ id: ActionID) async throws -> Action? {
         try await dbWriter.read { db in
             guard let row = try ActionRow.fetchOne(db, key: id.rawValue.uuidString) else { return nil }
-            return try row.asDomain(auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
+            return try row.asDomain(
+                evidence: try EvidenceSpanPersistence.fetch(db, owner: .action(row.actionID)),
+                auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
         }
     }
 
@@ -60,7 +66,9 @@ public struct GRDBActionRepository: ActionRepository {
                 .order(Column("created_at"))
                 .fetchAll(db)
             return try rows.map { row in
-                try row.asDomain(auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
+                try row.asDomain(
+                    evidence: try EvidenceSpanPersistence.fetch(db, owner: .action(row.actionID)),
+                    auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
             }
         }
     }
@@ -76,7 +84,9 @@ public struct GRDBActionRepository: ActionRepository {
                     ORDER BY action_item.created_at
                     """, arguments: [workspaceID.rawValue.uuidString])
             return try rows.map { row in
-                try row.asDomain(auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
+                try row.asDomain(
+                    evidence: try EvidenceSpanPersistence.fetch(db, owner: .action(row.actionID)),
+                    auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
             }
         }
     }

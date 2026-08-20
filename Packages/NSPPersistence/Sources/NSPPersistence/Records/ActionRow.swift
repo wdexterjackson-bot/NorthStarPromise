@@ -4,12 +4,12 @@ import NSPCore
 
 /// Mirrors the `action_item` table (docs/02 §5, named `action_item` rather
 /// than `action` — see the migration's comment on why). `Action.evidence`
-/// and `Action.dependencies` aren't round-tripped here: nothing in this
-/// codebase produces an `EvidenceSpan` yet (that needs a transcript
-/// pipeline `NSPIntelligence` doesn't have) or sets a dependency, so every
-/// `Action` built by `ActionRepository` carries `evidence: []` and
-/// `dependencies: []`. This is a documented scope cut, not silent data
-/// loss — nothing here ever receives a non-empty value to drop.
+/// round-trips through the shared `evidence_span` table via
+/// `EvidenceSpanPersistence` (`GRDBActionRepository` calls it, not this
+/// type — `asDomain` here takes evidence as a parameter the same way it
+/// already takes `auditTrail`). `Action.dependencies` still isn't
+/// round-tripped: nothing in this codebase sets one yet — a documented
+/// scope cut, not silent data loss.
 struct ActionRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "action_item"
 
@@ -80,7 +80,7 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
         self.rowRevision = rowRevision
     }
 
-    func asDomain(auditTrail: [AuditEntry]) throws -> Action {
+    func asDomain(evidence: [EvidenceSpan], auditTrail: [AuditEntry]) throws -> Action {
         guard let actionUUID = UUID(uuidString: actionID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "action_id", value: actionID)
         }
@@ -98,7 +98,7 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
             actionID: ActionID(rawValue: actionUUID), meetingID: MeetingID(rawValue: meetingUUID), text: text,
             owner: try Self.decodeOwner(state: ownerState, personID: ownerPersonID),
             date: try Self.decodeDate(state: dateState, value: dateValue), status: actionStatus,
-            destination: destination, evidence: [], createdBy: PersonID(rawValue: createdByUUID),
+            destination: destination, evidence: evidence, createdBy: PersonID(rawValue: createdByUUID),
             confirmedBy: try confirmedBy.map { string -> PersonID in
                 guard let uuid = UUID(uuidString: string) else {
                     throw PersistenceError.corruptRow(

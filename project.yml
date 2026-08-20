@@ -64,6 +64,9 @@ targets:
         NSCalendarsWriteOnlyAccessUsageDescription: >-
           North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in
           Settings.
+        NSSpeechRecognitionUsageDescription: >-
+          North-Star Promise transcribes your recordings on this device so it can generate a summary and action
+          items.
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"

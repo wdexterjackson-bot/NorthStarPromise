@@ -65,6 +65,53 @@ struct GRDBActionRepositoryTests {
             date: date, status: status, evidence: [], createdBy: createdBy)
     }
 
+    @Test func test_insertThenFind_roundTripsEvidenceSpans() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let graph = try await Self.makeMeetingGraph(appDatabase)
+        let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+
+        let evidence = [
+            EvidenceSpan(
+                meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 1000, endSample: 2000),
+                quotedText: "I'll send the recap by Friday", transcriptRevision: 1)
+        ]
+        var action = Self.makeAction(meetingID: graph.meetingID, createdBy: graph.personID)
+        action = Action(
+            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            date: action.date, status: action.status, evidence: evidence, createdBy: action.createdBy)
+
+        try await repository.insert(action, at: Date())
+        let found = try await repository.find(action.actionID)
+
+        #expect(found?.evidence == evidence)
+    }
+
+    @Test func test_update_replacesEvidenceRatherThanAccumulating() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let graph = try await Self.makeMeetingGraph(appDatabase)
+        let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+
+        let firstSpan = EvidenceSpan(
+            meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 0, endSample: 100),
+            quotedText: "first", transcriptRevision: 1)
+        var action = Self.makeAction(meetingID: graph.meetingID, createdBy: graph.personID)
+        action = Action(
+            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            date: action.date, status: action.status, evidence: [firstSpan], createdBy: action.createdBy)
+        try await repository.insert(action, at: Date())
+
+        let secondSpan = EvidenceSpan(
+            meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 200, endSample: 300),
+            quotedText: "second", transcriptRevision: 1)
+        action = Action(
+            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            date: action.date, status: action.status, evidence: [secondSpan], createdBy: action.createdBy)
+        try await repository.update(action, at: Date())
+
+        let found = try await repository.find(action.actionID)
+        #expect(found?.evidence == [secondSpan])
+    }
+
     @Test func test_insertThenFind_roundTripsUnresolvedFields() async throws {
         let appDatabase = try AppDatabase.makeInMemory()
         let graph = try await Self.makeMeetingGraph(appDatabase)

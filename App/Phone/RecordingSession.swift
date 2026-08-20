@@ -60,6 +60,11 @@ public final class RecordingSession {
     /// (and so never prompted) otherwise, since the whole point of the
     /// Settings toggle is that this is opt-in.
     public private(set) var pendingCalendarMeeting: Meeting?
+    /// Set right after a successful `stop()` when the meeting still has the
+    /// default title — `TodayView` shows `MeetingTitlePromptView` while
+    /// this is non-nil. Already-titled meetings (e.g. set via the iPad
+    /// canvas's title band) skip the prompt.
+    public private(set) var pendingTitleMeeting: Meeting?
     /// 0...1, the "voice thermometer" docs/07 §4 calls a level meter.
     /// Only meaningful while `.recording` — `0` otherwise, including while
     /// `.paused` (the engine keeps the mic open across a pause, but
@@ -80,7 +85,7 @@ public final class RecordingSession {
     /// (docs/07 §5: "notes taken before recording starts"). `start()` later
     /// promotes this same meeting in place rather than creating a second
     /// one. Returns `nil` (leaving state untouched) if setup isn't ready.
-    public func prepareDraft(title: String = "Untitled meeting") async -> MeetingID? {
+    public func prepareDraft(title: String = RecordingSession.defaultMeetingTitle) async -> MeetingID? {
         guard state == .idle, let policy = environment.defaultPolicy else { return nil }
 
         let newMeetingID = MeetingID(rawValue: UUID())
@@ -128,7 +133,7 @@ public final class RecordingSession {
                 let newMeetingID = MeetingID(rawValue: UUID())
                 let now = environment.clock.now()
                 let newMeeting = Meeting(
-                    meetingID: newMeetingID, workspaceID: policy.workspaceID, title: "Untitled meeting",
+                    meetingID: newMeetingID, workspaceID: policy.workspaceID, title: Self.defaultMeetingTitle,
                     captureMode: .phone, originDeviceID: environment.deviceID, startedAt: now, lifecycleState: .arming,
                     policyID: policy.policyID, processingMode: policy.defaultProcessingMode, availability: .complete,
                     createdAt: now, updatedAt: now)
@@ -148,6 +153,20 @@ public final class RecordingSession {
             var recordingMeeting = meeting
             recordingMeeting.lifecycleState = .recording
             try await environment.meetingRepository.update(recordingMeeting, at: environment.clock.now())
+
+            // Satisfies NetworkGate's consent check for every meeting
+            // recorded while "Sync to iCloud" is on (Settings) — the
+            // human confirmation this traces back to is that explicit
+            // toggle, not a silent default; this app has no separate
+            // per-participant consent UI yet. Best-effort: a failed write
+            // here just means this meeting won't sync, never a reason to
+            // fail the recording itself.
+            if recordingMeeting.processingMode != .localOnly {
+                let consent = ConsentRecord(
+                    consentRecordID: ConsentRecordID(rawValue: UUID()), meetingID: recordingMeeting.meetingID,
+                    method: .checklistConfirmed, timestamp: environment.clock.now())
+                try? await environment.consentRecordRepository.insert(consent, at: environment.clock.now())
+            }
 
             meetingID = meeting.meetingID
             state = .recording
@@ -282,8 +301,22 @@ public final class RecordingSession {
                     sampleRate: manifest.audioFormat.sampleRate)
                 meeting.endedAt = environment.clock.now()
                 try await environment.meetingRepository.update(meeting, at: environment.clock.now())
-                if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
+                // Title first, calendar second — never both sheets at once.
+                // The calendar event's title should reflect what the user
+                // just typed, not "Untitled meeting", so it waits for
+                // `dismissTitlePrompt` to fire it instead.
+                if meeting.title == Self.defaultMeetingTitle {
+                    pendingTitleMeeting = meeting
+                } else if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
                     pendingCalendarMeeting = meeting
+                }
+                // Best-effort, non-blocking — the meeting is already
+                // durably saved locally (I1); sync and processing are both
+                // fast follows on top, never a condition of "saved."
+                Task { await environment.syncCoordinator.syncNow(workspaceID: meeting.workspaceID) }
+                if let selfPersonID = environment.selfPersonID {
+                    let intelligence = environment.intelligenceCoordinator
+                    Task { await intelligence.processMeeting(meetingID, selfPersonID: selfPersonID) }
                 }
             }
             reset()
@@ -298,6 +331,21 @@ public final class RecordingSession {
     public func dismissCalendarPrompt() {
         pendingCalendarMeeting = nil
     }
+
+    /// Dismisses the post-recording title prompt — "Skip" or after saving
+    /// a real title, either way just closes the sheet. Processing already
+    /// started independently in `stop()`, not gated on this. `meeting` is
+    /// the (possibly retitled) meeting the caller was showing, so the
+    /// calendar prompt this may chain into — held back in `stop()` for
+    /// exactly this reason — shows the real title, not the placeholder.
+    public func dismissTitlePrompt(meeting: Meeting) {
+        pendingTitleMeeting = nil
+        if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
+            pendingCalendarMeeting = meeting
+        }
+    }
+
+    public static let defaultMeetingTitle = "Untitled meeting"
 
     /// Also polls `captureEngine.levelMeter` for `inputLevel` — a 10fps
     /// cadence keeps the level meter feeling live without polling faster
@@ -337,14 +385,4 @@ public final class RecordingSession {
         return try await repository.find(meetingID)
     }
 
-    private static func describeFailure(_ error: Error) -> String {
-        if let captureError = error as? CaptureEngineError {
-            switch captureError {
-            case .alreadyCapturing: return "Already recording."
-            case .notCapturing: return "Not currently recording."
-            case .backendFailure(let reason): return "Couldn't access the microphone: \(reason)"
-            }
-        }
-        return "\(error)"
-    }
 }

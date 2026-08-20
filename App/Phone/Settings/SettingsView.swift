@@ -42,9 +42,7 @@ struct SettingsView: View {
                     title: "Storage", symbol: "internaldrive.fill", tint: .gray,
                     message: "Per-device usage and reclamation policy aren't calculated yet.")
 
-                unconfiguredSection(
-                    title: "Sync", symbol: "icloud.fill", tint: .blue,
-                    message: "iCloud account state, quota, and sync status aren't connected to this screen yet.")
+                syncSection
 
                 unconfiguredSection(
                     title: "Integrations", symbol: "puzzlepiece.extension.fill", tint: .purple,
@@ -142,6 +140,74 @@ struct SettingsView: View {
         if environment.selectedCalendarIdentifier == nil {
             environment.selectedCalendarIdentifier = calendars.first?.identifier
         }
+    }
+
+    /// Explicit opt-in (I6): off by default, matching docs/06's safest
+    /// default. Turning this on only changes the *workspace's live
+    /// default* policy — meetings already recorded keep whatever mode
+    /// they were armed under (I5's freeze-at-Arming rule); only meetings
+    /// recorded after this point sync.
+    private var syncSection: some View {
+        Section("Sync") {
+            Toggle(
+                "Sync to iCloud",
+                isOn: Binding(
+                    get: { environment.defaultPolicy?.defaultProcessingMode != .localOnly },
+                    set: { newValue in Task { await setSyncEnabled(newValue) } }))
+
+            if environment.defaultPolicy?.defaultProcessingMode != .localOnly {
+                syncStatusRow
+                Button("Sync Now") { Task { await syncNow() } }
+                    .disabled(environment.syncCoordinator.status == .syncing)
+            }
+
+            Text(
+                "Recordings made while this is on are pushed to your private iCloud, so they show up on your "
+                    + "other devices signed into the same Apple ID. Meetings already recorded aren't affected."
+            )
+            .font(.caption)
+            .foregroundStyle(NSPColor.secondaryText)
+        }
+    }
+
+    @ViewBuilder
+    private var syncStatusRow: some View {
+        switch environment.syncCoordinator.status {
+        case .idle:
+            settingsRow(symbol: "icloud", tint: .blue, title: "Status") {
+                Text("Idle").foregroundStyle(NSPColor.secondaryText)
+            }
+        case .syncing:
+            settingsRow(symbol: "icloud", tint: .blue, title: "Status") {
+                ProgressView()
+            }
+        case .succeeded(let date):
+            settingsRow(symbol: "checkmark.icloud", tint: .green, title: "Status") {
+                Text("Last synced \(date.formatted(date: .omitted, time: .shortened))")
+                    .foregroundStyle(NSPColor.secondaryText)
+            }
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 2) {
+                settingsRow(symbol: "exclamationmark.icloud", tint: .orange, title: "Status") {
+                    Text("Couldn't sync").foregroundStyle(NSPColor.statusDanger)
+                }
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(NSPColor.secondaryText)
+            }
+        }
+    }
+
+    private func setSyncEnabled(_ enabled: Bool) async {
+        guard var policy = environment.defaultPolicy else { return }
+        policy.defaultProcessingMode = enabled ? .onDevicePreferred : .localOnly
+        try? await environment.policyRepository.update(policy, at: environment.clock.now())
+        environment.refreshDefaultPolicy(policy)
+    }
+
+    private func syncNow() async {
+        guard let workspaceID = environment.defaultPolicy?.workspaceID else { return }
+        await environment.syncCoordinator.syncNow(workspaceID: workspaceID)
     }
 
     @ViewBuilder

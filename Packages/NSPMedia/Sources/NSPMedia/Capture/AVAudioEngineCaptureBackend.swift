@@ -13,8 +13,9 @@ public final class AVAudioEngineCaptureBackend: CaptureBackend, @unchecked Senda
 
     public init() {}
 
-    public func activateSession(preferredSampleRate: Double) throws {
+    public func activateSession(preferredSampleRate: Double) async throws {
         #if os(iOS)
+            try await Self.ensureRecordPermission()
             let session = AVAudioSession.sharedInstance()
             do {
                 try session.setCategory(
@@ -38,6 +39,28 @@ public final class AVAudioEngineCaptureBackend: CaptureBackend, @unchecked Senda
             }
         #endif
     }
+
+    #if os(iOS)
+        /// Without this, `AVAudioEngine` happily starts and taps the input
+        /// node even with permission `.undetermined` or `.denied` — no
+        /// error, just a render tap that only ever delivers silence. This
+        /// is the single call that turns "recording captured nothing" into
+        /// an actual, typed failure instead.
+        private static func ensureRecordPermission() async throws {
+            switch AVAudioApplication.shared.recordPermission {
+            case .granted:
+                return
+            case .denied:
+                throw CaptureBackendError.permissionDenied
+            case .undetermined:
+                guard await AVAudioApplication.requestRecordPermission() else {
+                    throw CaptureBackendError.permissionDenied
+                }
+            @unknown default:
+                throw CaptureBackendError.permissionDenied
+            }
+        }
+    #endif
 
     public func deactivateSession() throws {
         #if os(iOS)

@@ -131,4 +131,42 @@ struct GRDBMeetingRepositoryTests {
         let all = try await repository.fetchAll(workspaceID: workspaceID, includeDeleted: true)
         #expect(Set(all.map(\.meetingID)) == Set([active.meetingID, deleted.meetingID]))
     }
+
+    /// The real proof behind `MeetingRepository.delete`'s doc comment: every
+    /// `meeting_id` foreign key declares `ON DELETE CASCADE` and
+    /// `AppDatabase` enables foreign-key enforcement, so deleting the
+    /// `meeting` row alone must remove its actions too — no per-table
+    /// cleanup code to trust or forget.
+    @Test func test_delete_removesTheMeetingAndCascadesToItsActions() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let (workspaceID, policyID) = try await Self.makeWorkspaceAndPolicy(appDatabase)
+        let personID = PersonID(rawValue: UUID())
+        try await appDatabase.dbWriter.write { db in
+            try db.execute(
+                sql: "INSERT INTO person (person_id, workspace_id, name, created_at, updated_at, row_revision) "
+                    + "VALUES (?, ?, 'You', '2026-01-01', '2026-01-01', 1)",
+                arguments: [personID.rawValue.uuidString, workspaceID.rawValue.uuidString])
+        }
+
+        let meetingRepository = GRDBMeetingRepository(dbWriter: appDatabase.dbWriter)
+        let meeting = Self.makeMeeting(workspaceID: workspaceID, policyID: policyID)
+        try await meetingRepository.insert(meeting, at: meeting.createdAt)
+
+        let actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+        let action = Action(
+            actionID: ActionID(rawValue: UUID()), meetingID: meeting.meetingID, text: "Follow up", evidence: [],
+            createdBy: personID)
+        try await actionRepository.insert(action, at: meeting.createdAt)
+
+        try await meetingRepository.delete(meeting.meetingID)
+
+        let foundMeeting = try await meetingRepository.find(meeting.meetingID)
+        #expect(foundMeeting == nil)
+        let remainingActions = try await appDatabase.dbWriter.read { db in
+            try Int.fetchOne(
+                db, sql: "SELECT COUNT(*) FROM action_item WHERE meeting_id = ?",
+                arguments: [meeting.meetingID.rawValue.uuidString])
+        }
+        #expect(remainingActions == 0)
+    }
 }

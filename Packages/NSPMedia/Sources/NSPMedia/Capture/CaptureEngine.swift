@@ -54,7 +54,7 @@ public actor CaptureEngine {
         guard !isCapturing else { throw CaptureEngineError.alreadyCapturing }
 
         do {
-            try backend.activateSession(preferredSampleRate: preferredSampleRate)
+            try await backend.activateSession(preferredSampleRate: preferredSampleRate)
         } catch {
             throw CaptureEngineError.backendFailure("\(error)")
         }
@@ -145,7 +145,7 @@ public actor CaptureEngine {
     /// lives above this type, not inside it.
     public func interruptionEnded() async throws {
         guard isCapturing, isPaused, let segmenter else { throw CaptureEngineError.notCapturing }
-        try backend.activateSession(preferredSampleRate: preferredSampleRate)
+        try await backend.activateSession(preferredSampleRate: preferredSampleRate)
         isPaused = false
         try await segmenter.interruptionEnded()
     }

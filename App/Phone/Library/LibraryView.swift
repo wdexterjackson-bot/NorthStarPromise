@@ -74,7 +74,10 @@ struct LibraryView: View {
                             .listRowBackground(Color.clear)
                         ForEach(filteredMeetings) { meeting in
                             meetingLink(meeting.meetingID) {
-                                MeetingRow(meeting: meeting).nspCard()
+                                MeetingRow(
+                                    meeting: meeting, onDelete: { Task { await deleteMeeting(meeting.meetingID) } }
+                                )
+                                .nspCard()
                             }
                             .listRowInsets(
                                 EdgeInsets(
@@ -155,6 +158,7 @@ struct LibraryView: View {
             .buttonStyle(.plain)
         } else {
             NavigationLink(value: meetingID) { label() }
+                .buttonStyle(.plain)
         }
     }
 
@@ -162,6 +166,15 @@ struct LibraryView: View {
         guard let workspaceID = environment.defaultPolicy?.workspaceID else { return }
         do {
             meetings = try await environment.meetingRepository.fetchAll(workspaceID: workspaceID, includeDeleted: false)
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
+    private func deleteMeeting(_ meetingID: MeetingID) async {
+        do {
+            try await environment.deleteMeeting(meetingID)
+            await loadMeetings()
         } catch {
             loadError = "\(error)"
         }

@@ -10,6 +10,11 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
     /// `isTitleSensitive` is set — never log it (docs/11 §9).
     public var title: String
     public var isTitleSensitive: Bool
+    /// A second, smaller title-band line — iPad's ruled-paper canvas
+    /// (docs/07 §5's mockup: "Concentrix" / "Onsite Visit and QBR"). Free
+    /// text the user edits directly on the page; no other screen shows it
+    /// yet.
+    public var subtitle: String?
     public var calendarEventID: String?
 
     public let captureMode: CaptureMode
@@ -39,6 +44,7 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         workspaceID: WorkspaceID,
         title: String,
         isTitleSensitive: Bool = false,
+        subtitle: String? = nil,
         calendarEventID: String? = nil,
         captureMode: CaptureMode,
         originDeviceID: DeviceID,
@@ -59,6 +65,7 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         self.workspaceID = workspaceID
         self.title = title
         self.isTitleSensitive = isTitleSensitive
+        self.subtitle = subtitle
         self.calendarEventID = calendarEventID
         self.captureMode = captureMode
         self.originDeviceID = originDeviceID

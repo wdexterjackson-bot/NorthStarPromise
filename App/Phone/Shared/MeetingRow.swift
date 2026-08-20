@@ -10,6 +10,12 @@ import SwiftUI
 @MainActor
 struct MeetingRow: View {
     let meeting: Meeting
+    /// `nil` renders no delete affordance at all — every call site wires
+    /// this today, but a future read-only context (e.g. a shared meeting
+    /// the viewer doesn't own) can omit it without a separate row type.
+    var onDelete: (() -> Void)?
+
+    @State private var isConfirmingDelete = false
 
     private var displayTitle: String {
         if meeting.isTitleSensitive || meeting.title.isEmpty {
@@ -59,6 +65,29 @@ struct MeetingRow: View {
             }
 
             Spacer(minLength: 0)
+
+            if let onDelete {
+                Menu {
+                    Button(role: .destructive) {
+                        isConfirmingDelete = true
+                    } label: {
+                        Label("Delete", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(NSPColor.secondaryText)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+                .confirmationDialog(
+                    "Delete this meeting?", isPresented: $isConfirmingDelete, titleVisibility: .visible
+                ) {
+                    Button("Delete", role: .destructive, action: onDelete)
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("Removes the recording, notes, transcript, and any linked action items. Can't be undone.")
+                }
+            }
         }
     }
 }

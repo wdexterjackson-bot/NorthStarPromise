@@ -2,19 +2,23 @@ import NSPCore
 import NSPDesignSystem
 import SwiftUI
 
-/// docs/07 §4's Audio tab, scoped to what a `Segment`/`TimelineEvent` pair
-/// actually supports today: a real per-segment player and marker seek.
-/// Chapters, a silence map, redaction, and export aren't wired to anything
-/// yet — this tab is honest about that rather than showing dead controls.
+/// docs/07 §4's Audio tab: a continuous player over the meeting's stitched
+/// composite (`SegmentStitcher`) plus marker seek, with the per-segment list
+/// kept below for transfer-state visibility (queued/verified/reclaimed) and
+/// as a working fallback if the composite couldn't be built. Chapters, a
+/// silence map, redaction, and export aren't wired to anything yet — this
+/// tab is honest about that rather than showing dead controls.
 @MainActor
 struct AudioTab: View {
     let meeting: Meeting
     let environment: AppEnvironment
+    let playback: AudioPlaybackController
+    let compositeAudioURL: URL?
+    let compositeAudioError: String?
 
     @State private var segments: [Segment] = []
     @State private var markers: [TimelineEvent] = []
     @State private var loadError: String?
-    @State private var playback = AudioPlaybackController()
 
     var body: some View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
@@ -25,14 +29,38 @@ struct AudioTab: View {
                     "No audio yet", systemImage: "waveform",
                     description: Text("Segments recorded for this meeting will appear here."))
             } else {
-                segmentsSection
+                playerSection
                 if !markerEvents.isEmpty {
                     markersSection
                 }
+                segmentsSection
             }
         }
         .task { await load() }
-        .onDisappear { playback.stop() }
+    }
+
+    @ViewBuilder
+    private var playerSection: some View {
+        if let compositeAudioURL {
+            AudioPlayerCard(playback: playback, fileURL: compositeAudioURL)
+        } else if let compositeAudioError {
+            VStack(alignment: .leading, spacing: NSPSpacing.small) {
+                NSPStatusBadge(
+                    symbolName: "exclamationmark.triangle.fill", label: "Couldn't prepare audio",
+                    tint: NSPColor.statusDanger)
+                Text(compositeAudioError).font(.caption).foregroundStyle(NSPColor.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .nspCard()
+        } else {
+            HStack(spacing: NSPSpacing.medium) {
+                ProgressView()
+                Text("Preparing audio…").font(.callout).foregroundStyle(NSPColor.secondaryText)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, NSPSpacing.large)
+            .nspCard()
+        }
     }
 
     private var markerEvents: [TimelineEvent] {
@@ -63,14 +91,9 @@ struct AudioTab: View {
     }
 
     private func seek(to marker: TimelineEvent) {
-        guard
-            let segment = segments.first(where: {
-                marker.sampleOffset >= $0.startSample && marker.sampleOffset < $0.startSample + $0.sampleCount
-            })
-        else { return }
-        let offsetSamples = marker.sampleOffset - segment.startSample
-        let offsetSeconds = TimeInterval(offsetSamples) / TimeInterval(segment.sampleRate)
-        playback.play(segment: segment, fromOffsetSeconds: offsetSeconds)
+        guard let compositeAudioURL else { return }
+        let offsetSeconds = TimeInterval(marker.sampleOffset) / TimeInterval(meeting.canonicalDuration.sampleRate)
+        playback.play(fileURL: compositeAudioURL, fromOffsetSeconds: offsetSeconds)
     }
 
     private func load() async {
@@ -85,12 +108,72 @@ struct AudioTab: View {
     }
 }
 
+/// The continuous scrubber player — play/pause, elapsed/remaining time, and
+/// a draggable progress bar over the meeting's stitched composite file.
+private struct AudioPlayerCard: View {
+    let playback: AudioPlaybackController
+    let fileURL: URL
+
+    private var progress: Double {
+        guard playback.durationSeconds > 0 else { return 0 }
+        return playback.currentTimeSeconds / playback.durationSeconds
+    }
+
+    private func timeLabel(_ seconds: TimeInterval) -> String {
+        let total = max(0, Int(seconds))
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
+    var body: some View {
+        VStack(spacing: NSPSpacing.medium) {
+            HStack(spacing: NSPSpacing.medium) {
+                Button {
+                    if playback.playingURL == fileURL {
+                        playback.togglePlayPause()
+                    } else {
+                        playback.play(fileURL: fileURL)
+                    }
+                } label: {
+                    ZStack {
+                        Circle().fill(NSPColor.accent.gradient).frame(width: 52, height: 52)
+                        Image(
+                            systemName: playback.isPlaying && playback.playingURL == fileURL
+                                ? "pause.fill" : "play.fill"
+                        )
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(.white)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                VStack(spacing: NSPSpacing.extraSmall) {
+                    ProgressView(value: progress)
+                        .tint(NSPColor.accent)
+                    HStack {
+                        Text(timeLabel(playback.playingURL == fileURL ? playback.currentTimeSeconds : 0))
+                        Spacer()
+                        Text(timeLabel(playback.durationSeconds))
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(NSPColor.secondaryText)
+                }
+            }
+        }
+        .nspCard()
+        .task(id: fileURL) {
+            // Populates duration/scrubber as soon as the tab appears,
+            // without starting playback.
+            playback.load(fileURL: fileURL)
+        }
+    }
+}
+
 private struct SegmentRowView: View {
     let segment: Segment
     let playback: AudioPlaybackController
 
     private var isCurrentlyPlaying: Bool {
-        playback.playingSegmentID == segment.segmentID && playback.isPlaying
+        playback.playingURL == segment.localURL && playback.isPlaying
     }
 
     private var durationLabel: String {
@@ -101,7 +184,12 @@ private struct SegmentRowView: View {
     var body: some View {
         HStack(spacing: NSPSpacing.medium) {
             Button {
-                playback.togglePlayPause(segment: segment)
+                guard let localURL = segment.localURL else { return }
+                if playback.playingURL == localURL {
+                    playback.togglePlayPause()
+                } else {
+                    playback.play(fileURL: localURL)
+                }
             } label: {
                 ZStack {
                     Circle().fill(NSPColor.accent.gradient).frame(width: 40, height: 40)

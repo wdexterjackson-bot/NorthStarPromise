@@ -9,6 +9,15 @@ public protocol MeetingRepository: Sendable {
     func update(_ meeting: Meeting, at date: Date) async throws
     func find(_ id: MeetingID) async throws -> Meeting?
     func fetchAll(workspaceID: WorkspaceID, includeDeleted: Bool) async throws -> [Meeting]
+    /// Deletes the meeting row outright. Every table with a `meeting_id`
+    /// foreign key declares `ON DELETE CASCADE` (docs/02 §5) and
+    /// `AppDatabase` enables SQLite foreign-key enforcement, so this alone
+    /// removes every segment, note, transcript turn, insight, action, and
+    /// evidence span the meeting owns — no per-table cleanup needed here.
+    /// On-disk cleanup (the audio/ink files themselves) is the caller's
+    /// job, not this repository's (docs/11 §4: repositories own DB rows,
+    /// not the filesystem).
+    func delete(_ id: MeetingID) async throws
 }
 
 public struct GRDBMeetingRepository: MeetingRepository {
@@ -48,6 +57,12 @@ public struct GRDBMeetingRepository: MeetingRepository {
     public func find(_ id: MeetingID) async throws -> Meeting? {
         try await dbWriter.read { db in
             try Self.fetchMeeting(db, meetingID: id.rawValue.uuidString)
+        }
+    }
+
+    public func delete(_ id: MeetingID) async throws {
+        try await dbWriter.write { db in
+            _ = try MeetingRow.deleteOne(db, key: id.rawValue.uuidString)
         }
     }
 

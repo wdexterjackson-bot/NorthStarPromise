@@ -4,6 +4,7 @@ import SwiftUI
 struct NorthStarPhoneApp: App {
     @State private var environment: AppEnvironment?
     @State private var launchError: String?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -34,10 +35,22 @@ struct NorthStarPhoneApp: App {
                         await DebugFixtures.seedIfNeeded(environment: newEnvironment)
                     #endif
                     environment = newEnvironment
+                    if let workspaceID = newEnvironment.defaultPolicy?.workspaceID {
+                        Task { await newEnvironment.syncCoordinator.syncNow(workspaceID: workspaceID) }
+                    }
                 } catch {
                     launchError = "\(error)"
                 }
             }
+        }
+        // Pulls whatever another device pushed while this one was in the
+        // background — best-effort, same non-blocking shape as the
+        // launch-time and post-Stop sync calls.
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active, let environment, let workspaceID = environment.defaultPolicy?.workspaceID else {
+                return
+            }
+            Task { await environment.syncCoordinator.syncNow(workspaceID: workspaceID) }
         }
     }
 }

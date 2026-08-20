@@ -14,6 +14,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
     var workspaceID: String
     var title: String
     var isTitleSensitive: Bool
+    var subtitle: String?
     var calendarEventID: String?
     var captureMode: String
     var originDeviceID: String
@@ -39,6 +40,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         case workspaceID = "workspace_id"
         case title
         case isTitleSensitive = "is_title_sensitive"
+        case subtitle
         case calendarEventID = "calendar_event_id"
         case captureMode = "capture_mode"
         case originDeviceID = "origin_device_id"
@@ -67,6 +69,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         self.workspaceID = meeting.workspaceID.rawValue.uuidString
         self.title = meeting.title
         self.isTitleSensitive = meeting.isTitleSensitive
+        self.subtitle = meeting.subtitle
         self.calendarEventID = meeting.calendarEventID
         self.captureMode = meeting.captureMode.rawValue
         self.originDeviceID = meeting.originDeviceID.rawValue.uuidString
@@ -203,6 +206,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
             workspaceID: WorkspaceID(rawValue: workspaceUUID),
             title: title,
             isTitleSensitive: isTitleSensitive,
+            subtitle: subtitle,
             calendarEventID: calendarEventID,
             captureMode: captureModeValue,
             originDeviceID: DeviceID(rawValue: originDeviceUUID),

@@ -30,4 +30,10 @@ public final class FakeContainerFileSystem: ContainerFileSystem, @unchecked Send
         defer { lock.unlock() }
         return createdDirectories[url]
     }
+
+    public func removeDirectory(at url: URL) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        createdDirectories.removeValue(forKey: url)
+    }
 }

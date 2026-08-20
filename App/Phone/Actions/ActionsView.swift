@@ -102,6 +102,7 @@ struct ActionsView: View {
             ForEach(actions) { action in
                 let card = ActionRowCard(
                     action: action, environment: environment, onChanged: apply, onSendRequested: { sendTarget = $0 },
+                    onDelete: { Task { await deleteAction(action.actionID) } },
                     showsSelection: isSelecting && status == .proposed,
                     isSelected: selectedIDs.contains(action.actionID),
                     onToggleSelection: { toggleSelection(action.actionID) },
@@ -154,6 +155,16 @@ struct ActionsView: View {
         }
         isSelecting = false
         selectedIDs.removeAll()
+    }
+
+    private func deleteAction(_ id: ActionID) async {
+        actions.removeAll { $0.actionID == id }
+        do {
+            try await environment.actionRepository.delete(id)
+        } catch {
+            loadError = "\(error)"
+            await load()
+        }
     }
 
     private func load() async {

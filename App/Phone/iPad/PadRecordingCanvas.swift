@@ -3,11 +3,12 @@ import NSPDesignSystem
 import NSPMedia
 import PencilKit
 import SwiftUI
+import UIKit
 
 /// The writing tool currently active on `PadRecordingCanvas` — shared with
 /// `PadCanvasHeader`, which renders the palette that sets it.
 enum PadTool: Equatable {
-    case pointer, text, pen
+    case pointer, text, pen, highlighter
 }
 
 /// iPad's signature capability (docs/07 §5, written against a reference
@@ -38,13 +39,19 @@ struct PadRecordingCanvas: View {
     @State private var lines: [PadNoteLine] = [PadNoteLine()]
     @FocusState private var focusedLineID: UUID?
     @State private var isConfirmingStop = false
-    @State private var loadError: String?
+    // `loadError`, the ink `@State`, and the two helpers/constant just below
+    // aren't `private` — `PadRecordingCanvas+Ink.swift` (a separate file,
+    // split out to stay under SwiftLint's file-length cap) needs them, and
+    // `private` doesn't cross files even between extensions of the same type.
+    @State var loadError: String?
     @State private var activeTool: PadTool = .pointer
     @State private var meetingTitle = ""
-    @State private var drawing = PKDrawing()
-    @State private var strokesByID: [UUID: PKStroke] = [:]
-    @State private var strokeTracker: StrokeGroupTracker?
-    @State private var idleGroupCloseTask: Task<Void, Never>?
+    @State private var meetingSubtitle = ""
+    @State private var penColor: Color = .black
+    @State var drawing = PKDrawing()
+    @State var strokesByID: [UUID: PKStroke] = [:]
+    @State var strokeTracker: StrokeGroupTracker?
+    @State var idleGroupCloseTask: Task<Void, Never>?
     /// A synthetic, all-negative sample timeline for content created before
     /// recording starts (`state == .draft`) — increases monotonically just
     /// like the real one, so ordering/grouping logic that compares sample
@@ -52,22 +59,25 @@ struct PadRecordingCanvas: View {
     /// real (non-negative) offset and is unambiguously "pre-recording" for
     /// the `--:--` margin stamp (docs/07 §5). Never persisted as a claim
     /// about real elapsed time — it just needs to be negative and ordered.
-    @State private var nextPreRecordingSampleOffset: Int64 = -1_000_000_000_000
+    @State var nextPreRecordingSampleOffset: Int64 = -1_000_000_000_000
 
-    private static let idleGroupCloseDelay: Duration = .seconds(2)
+    static let idleGroupCloseDelay: Duration = .seconds(2)
 
     var body: some View {
         VStack(spacing: 0) {
             PadCanvasHeader(
-                session: session, activeTool: $activeTool, isConfirmingStop: $isConfirmingStop,
+                session: session, activeTool: $activeTool, penColor: $penColor, isConfirmingStop: $isConfirmingStop,
                 onSelectNonPenTool: {
                     focusedLineID = focusedLineID ?? lines.first?.id
                     Task { await closeOpenInkGroupIfNeeded() }
                 })
             ZStack(alignment: .topLeading) {
                 page
-                PadInkCanvas(drawing: $drawing, isActive: activeTool == .pen, onDrawingChanged: handleDrawingChange)
-                    .allowsHitTesting(activeTool == .pen)
+                PadInkCanvas(
+                    drawing: $drawing, isActive: isInkToolActive, tool: currentInkTool,
+                    onDrawingChanged: handleDrawingChange
+                )
+                .allowsHitTesting(isInkToolActive)
             }
         }
         .background(NSPColor.background)
@@ -91,18 +101,39 @@ struct PadRecordingCanvas: View {
         }
     }
 
+    private var isInkToolActive: Bool { activeTool == .pen || activeTool == .highlighter }
+
+    /// The real `PKTool` for whichever writing tool is active — Selection
+    /// and Text never draw, so a placeholder lasso tool is fine for them
+    /// (hit-testing is already off in those states).
+    private var currentInkTool: PKTool {
+        switch activeTool {
+        case .pen: return PKInkingTool(.pen, color: UIColor(penColor), width: 3)
+        case .highlighter:
+            return PKInkingTool(
+                .marker, color: UIColor(PadCanvasHeader.highlighterColor).withAlphaComponent(0.4), width: 18)
+        case .pointer, .text: return PKLassoTool()
+        }
+    }
+
     // MARK: - Page
 
     private var page: some View {
         ScrollView {
-            TextField("Meeting name", text: $meetingTitle)
-                .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                .multilineTextAlignment(.center)
-                .textFieldStyle(.plain)
-                .onSubmit { Task { await saveMeetingTitle() } }
-                .padding(.top, NSPSpacing.extraLarge)
-                .padding(.bottom, NSPSpacing.large)
-                .frame(maxWidth: .infinity)
+            VStack(spacing: NSPSpacing.small) {
+                TextField("Meeting name", text: $meetingTitle)
+                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .onSubmit { Task { await saveMeetingTitle() } }
+                TextField("Subtitle", text: $meetingSubtitle)
+                    .font(.system(.title3, design: .rounded).weight(.semibold))
+                    .foregroundStyle(NSPColor.secondaryText)
+                    .onSubmit { Task { await saveMeetingSubtitle() } }
+            }
+            .multilineTextAlignment(.center)
+            .textFieldStyle(.plain)
+            .padding(.top, NSPSpacing.extraLarge)
+            .padding(.bottom, NSPSpacing.large)
+            .frame(maxWidth: .infinity)
 
             LazyVStack(spacing: 0) {
                 ForEach($lines) { $line in
@@ -115,21 +146,42 @@ struct PadRecordingCanvas: View {
             }
             .padding(.horizontal, NSPSpacing.large)
             .frame(minHeight: 1400, alignment: .top)
-            .background(alignment: .topLeading) { marginRule }
+            .background(alignment: .topLeading) { pageRules }
         }
         .background(Color.white)
-        .onDisappear { Task { await saveMeetingTitle() } }
+        .onDisappear {
+            Task {
+                await saveMeetingTitle()
+                await saveMeetingSubtitle()
+            }
+        }
     }
 
-    /// The red vertical rule + timestamp gutter, matching the mockup —
-    /// drawn once behind every ruled line rather than per-row, so it reads
-    /// as one continuous margin the way real notebook paper does.
-    private var marginRule: some View {
-        Rectangle()
-            .fill(Color.red.opacity(0.55))
-            .frame(width: 1.5)
-            .padding(.leading, 60)
-            .allowsHitTesting(false)
+    /// The blue horizontal ruled lines + red vertical margin rule, matching
+    /// the mockup — drawn once behind the whole page rather than per-row,
+    /// so ruled lines cover the full sheet (not just rows with a typed
+    /// `PadNoteLine` on them) and both rules grow automatically as the page
+    /// grows past its `minHeight` (`Canvas`/`Rectangle` both read whatever
+    /// size their container ends up being, every time it changes).
+    private var pageRules: some View {
+        ZStack(alignment: .topLeading) {
+            Canvas { context, size in
+                var ruleY = PadNoteLineRow.rowHeight
+                while ruleY < size.height {
+                    let line = Path { path in
+                        path.move(to: CGPoint(x: 0, y: ruleY))
+                        path.addLine(to: CGPoint(x: size.width, y: ruleY))
+                    }
+                    context.stroke(line, with: .color(.blue.opacity(0.25)), lineWidth: 1)
+                    ruleY += PadNoteLineRow.rowHeight
+                }
+            }
+            Rectangle()
+                .fill(Color.red.opacity(0.55))
+                .frame(width: 1.5)
+                .padding(.leading, PadNoteLineRow.timestampGutterWidth + NSPSpacing.medium)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: - Meeting title
@@ -138,6 +190,7 @@ struct PadRecordingCanvas: View {
         guard let meetingID = session.meetingID, let meeting = try? await environment.meetingRepository.find(meetingID)
         else { return }
         meetingTitle = meeting.title
+        meetingSubtitle = meeting.subtitle ?? ""
     }
 
     private func saveMeetingTitle() async {
@@ -147,6 +200,17 @@ struct PadRecordingCanvas: View {
         let trimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed != meeting.title else { return }
         meeting.title = trimmed
+        try? await environment.meetingRepository.update(meeting, at: environment.clock.now())
+    }
+
+    private func saveMeetingSubtitle() async {
+        guard let meetingID = session.meetingID,
+            var meeting = try? await environment.meetingRepository.find(meetingID)
+        else { return }
+        let trimmed = meetingSubtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newSubtitle = trimmed.isEmpty ? nil : trimmed
+        guard newSubtitle != meeting.subtitle else { return }
+        meeting.subtitle = newSubtitle
         try? await environment.meetingRepository.update(meeting, at: environment.clock.now())
     }
 
@@ -194,7 +258,7 @@ struct PadRecordingCanvas: View {
 
     /// Hands out the next tick of the synthetic pre-recording timeline —
     /// see `nextPreRecordingSampleOffset`'s doc comment.
-    private func reservePreRecordingSampleOffset() -> Int64 {
+    func reservePreRecordingSampleOffset() -> Int64 {
         defer { nextPreRecordingSampleOffset += 1 }
         return nextPreRecordingSampleOffset
     }
@@ -242,7 +306,7 @@ struct PadRecordingCanvas: View {
         }
     }
 
-    private static func millisecondTimestamp(_ date: Date) -> Int64 {
+    static func millisecondTimestamp(_ date: Date) -> Int64 {
         Int64(date.timeIntervalSince1970 * 1000)
     }
 
@@ -252,118 +316,6 @@ struct PadRecordingCanvas: View {
     }
 }
 
-// MARK: - Ink
-//
-// Split into an extension (rather than staying in the struct body above) to
-// stay under SwiftLint's type-body-length cap — `private` here still
-// reaches every `@State` var declared in the struct, since both live in
-// this same file.
-extension PadRecordingCanvas {
-    /// `PadInkCanvas` reports the whole drawing on every change; strokes
-    /// past the count we last saw are the new ones (PencilKit only ever
-    /// appends to `PKDrawing.strokes`), computed from the *previous*
-    /// `drawing` before it's overwritten.
-    private func handleDrawingChange(_ newDrawing: PKDrawing) {
-        let previousCount = drawing.strokes.count
-        drawing = newDrawing
-        guard newDrawing.strokes.count > previousCount else { return }
-        let newStrokes = Array(newDrawing.strokes[previousCount...])
-        Task { await handleStrokesAdded(newStrokes) }
-    }
-
-    /// Feeds every newly-drawn stroke into `StrokeGroupTracker`, persisting
-    /// whichever group closes as a result, and (re-)arms the idle-close
-    /// timer so a group left open with no further strokes still gets
-    /// stamped and saved rather than waiting forever for one more stroke.
-    private func handleStrokesAdded(_ strokes: [PKStroke]) async {
-        guard !strokes.isEmpty else { return }
-        if strokeTracker == nil {
-            let sampleRate = await session.currentSampleRate() ?? 48000
-            strokeTracker = StrokeGroupTracker(sampleRate: sampleRate)
-        }
-        let isPreRecording = session.state == .draft
-        let batchSampleOffset = isPreRecording ? nil : (await session.currentSampleOffset() ?? 0)
-        for stroke in strokes {
-            let strokeID = UUID()
-            strokesByID[strokeID] = stroke
-            let sampleOffset = batchSampleOffset ?? reservePreRecordingSampleOffset()
-            let event = InkStrokeEvent(strokeID: strokeID, boundingBox: stroke.renderBounds, sampleOffset: sampleOffset)
-            if let closedGroup = strokeTracker?.handle(event) {
-                await persist(group: closedGroup)
-            }
-        }
-        armIdleGroupCloseTimer()
-    }
-
-    private func armIdleGroupCloseTimer() {
-        idleGroupCloseTask?.cancel()
-        idleGroupCloseTask = Task {
-            try? await Task.sleep(for: Self.idleGroupCloseDelay)
-            guard !Task.isCancelled else { return }
-            await closeOpenInkGroupIfNeeded()
-        }
-    }
-
-    /// Force-closes whatever ink group is open — called by the idle timer,
-    /// on tool switch away from Pen, on Stop, and when the canvas leaves
-    /// the screen, so a group is never left unpersisted indefinitely.
-    private func closeOpenInkGroupIfNeeded() async {
-        idleGroupCloseTask?.cancel()
-        idleGroupCloseTask = nil
-        if let closedGroup = strokeTracker?.closeOpenGroup() {
-            await persist(group: closedGroup)
-        }
-    }
-
-    private func persist(group: InkStrokeGroup) async {
-        guard let meetingID = session.meetingID, let selfPersonID = environment.selfPersonID,
-            let container = session.meetingContainer
-        else { return }
-        let groupStrokes = group.strokeIDs.compactMap { strokesByID[$0] }
-        for id in group.strokeIDs { strokesByID.removeValue(forKey: id) }
-        guard !groupStrokes.isEmpty else { return }
-
-        let filename = "\(UUID().uuidString).drawing"
-        let relativePath = "ink/\(filename)"
-        let assetURL = container.inkDirectoryURL.appendingPathComponent(filename)
-        let now = environment.clock.now()
-
-        do {
-            let data = PKDrawing(strokes: groupStrokes).dataRepresentation()
-            try environment.inkAssetFileSystem.write(data, to: assetURL)
-            let content = BlockContent.assetReference(path: relativePath)
-            let block = NoteBlock(
-                blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: selfPersonID, type: .sketch,
-                content: content, creationRange: group.sampleRange, privacy: .shared,
-                opLog: [
-                    Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: content)
-                ])
-            try await environment.noteBlockRepository.insert(block, at: now)
-        } catch {
-            loadError = "\(error)"
-        }
-    }
-
-    /// Restores every already-persisted `.sketch` block's strokes into one
-    /// composited `PKDrawing` for display — each block keeps its own
-    /// `creationRange` in the database; only strokes drawn *after* this
-    /// load feed the tracker (`handleDrawingChange`'s count-diff already
-    /// treats everything in the restored `drawing` as a fixed baseline).
-    private func loadExistingInk() async {
-        guard let meetingID = session.meetingID, let container = session.meetingContainer else { return }
-        do {
-            let blocks = try await environment.noteBlockRepository.fetchAll(meetingID: meetingID)
-            let sketchBlocks = blocks.filter { $0.type == .sketch }
-            var strokes: [PKStroke] = []
-            for block in sketchBlocks {
-                guard case .assetReference(let path) = block.content else { continue }
-                let url = container.rootURL.appendingPathComponent(path)
-                let data = try environment.inkAssetFileSystem.read(from: url)
-                strokes.append(contentsOf: try PKDrawing(data: data).strokes)
-            }
-            drawing = PKDrawing(strokes: strokes)
-        } catch {
-            loadError = "\(error)"
-        }
-    }
-}
+// Ink capture (stroke grouping, persistence, restore) lives in
+// `PadRecordingCanvas+Ink.swift` — split out to stay under SwiftLint's
+// file-length cap.

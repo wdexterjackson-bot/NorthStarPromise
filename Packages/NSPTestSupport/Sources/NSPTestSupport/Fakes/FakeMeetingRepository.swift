@@ -24,6 +24,10 @@ public actor FakeMeetingRepository: MeetingRepository {
         storage[id]
     }
 
+    public func delete(_ id: MeetingID) async throws {
+        storage.removeValue(forKey: id)
+    }
+
     public func fetchAll(workspaceID: WorkspaceID, includeDeleted: Bool) async throws -> [Meeting] {
         storage.values
             .filter { $0.workspaceID == workspaceID && (includeDeleted || $0.deletedAt == nil) }
