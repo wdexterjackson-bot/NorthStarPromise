@@ -198,19 +198,23 @@ calendar connector) before any of NSP-125's calendar export work touches attende
 
 # M4 — iPad canvas and Pencil
 
-**Status as of 2026-08-20** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written against a
-reference mockup at `~/Downloads/IMG_0121.PNG`): the iPad shell exists and is real —
+**Status as of 2026-08-20, updated (v2)** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written
+against a reference mockup at `~/Downloads/IMG_0121.PNG`): the iPad shell exists and is real —
 `App/Phone/RootView.swift` picks `PadRootView` vs. the iPhone `TabView` by device idiom at runtime (this is a
 universal app, not a separate target); `App/Phone/iPad/PadRootView.swift` is a working 3-column
-`NavigationSplitView` (sidebar of the five areas → content → meeting detail); `App/Phone/iPad/
-PadRecordingCanvas.swift` is a **v1** note canvas — plain ruled `TextField` rows, each backed by a real
-`.richText` `NoteBlock` anchored to a real sample offset (`Segmenter.currentSampleOffset()` /
-`CaptureEngine.currentSampleOffset()` / `RecordingSession.currentSampleOffset()`, all new, read-only, don't
-touch segment or timeline state). It does **not** yet match the mockup: no PencilKit ink, no photo insertion,
-light-chrome toolbar instead of the dark header + tool palette, and it only appears once `Recording` rather
-than being available pre-recording with `--:--` stamps. **Next step here is `NSP-100`/`NSP-101`** (PencilKit
-ink capture + stroke-group timestamping) plus the pre-recording-availability and header-redesign work docs/07
-§ 5 now specifies — none of that is started.
+`NavigationSplitView` (sidebar of the five areas → content → meeting detail). `App/Phone/iPad/
+PadRecordingCanvas.swift` now has the dark header + tool palette (`PadCanvasHeader`; Pointer/Text/Pen real,
+the rest honestly disabled), an editable title band, the red margin rule, and **real PencilKit ink**
+(`PadInkCanvas`, `NSP-100`) persisted as a `.sketch` `NoteBlock` referencing an asset file in the meeting
+container's `ink/` directory — plus the v1 typed-line editor, each ruled line still a real `.richText`
+`NoteBlock` anchored to a real sample offset (`Segmenter`/`CaptureEngine`/`RecordingSession
+.currentSampleOffset()`, read-only, don't touch segment or timeline state). **Still not built:** `NSP-101`
+stroke-group timestamping (ink is one page-wide layer with no margin stamp of its own yet — the biggest
+remaining gap); photo insertion; multi-page; pre-recording availability with `--:--` stamps (needs a "start a
+draft meeting before recording" entry flow that doesn't exist — a product decision, not just engineering).
+Not yet visually verified in Simulator beyond build/lint/test passing — this environment has no UI-automation
+path to tap "Start Recording" and navigate into the canvas for a live screenshot; verify on a real device or
+via manual Simulator interaction before trusting the visual result matches the mockup.
 
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
