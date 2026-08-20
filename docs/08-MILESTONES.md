@@ -64,6 +64,17 @@ into Apple Reminders, and exports a Markdown recap. The whole path works with `P
 Thin-but-real means: one summary template, one language, on-device ASR only, no diarization beyond
 "speaker 1/2", no Pencil, no share links, no cloud plane, no third-party connectors.
 
+**Actual sequencing as of 2026-08-20 diverged from this table** — worth knowing before trusting it at a glance.
+Real work went iPhone-first and breadth-first rather than following the pillar order below: Today/Library/
+Meeting-detail/Notes/Audio/Actions/Settings are all real and wired on iPhone (including a full cross-meeting
+Actions dashboard and calendar-event creation — both listed as "deferred" in the table below, which is now
+stale for iPhone specifically), markers are real editable notes, there's a live input-level meter, and a first
+iPad shell (`PadRootView` + a v1 `PadRecordingCanvas`, see `docs/09-BACKLOG.md` M4's status note) exists. None
+of Watch capture, transcription, summaries, diarization, sync, or sharing/export are built — the table's
+sequencing logic (capture → transcript → recap → actions → export, across all three devices before going deep
+on any one) was not what actually happened. Treat the table below as the intended shape, and `docs/09-BACKLOG.md`'s
+per-milestone status notes as the source of truth for what's actually done.
+
 | Slice component | What ships in M1 | What is deferred |
 |---|---|---|
 | Watch capture | Start/pause/resume/stop/marker, segments, manifest, durable ack | Complications, Smart Stack, recovery repair, battery preflight polish |

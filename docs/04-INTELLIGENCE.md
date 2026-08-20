@@ -239,6 +239,51 @@ sampled diff before commit:
 Every rename writes an `AuditEvent` and feeds correction memory (§ 8). Renames are never applied speculatively
 across meetings without the user choosing the third scope.
 
+### 3.2 Additional resolution signals (requested 2026-08-20, not yet implemented)
+
+Two more inputs to the same ranked list in § 3, both still bound by "a name is never invented without
+evidence" — a heuristic here produces a *suggestion chip*, never a silent assignment:
+
+- **Name-in-address heuristic.** If a turn contains a vocative address ("what do you think, **Mary**?", "over
+  to you, **Sam**"), the *next* speaker turn's cluster gets a suggestion chip naming the addressee — the
+  address itself is the `EvidenceSpan`. This is pattern-based (a short cue-phrase + capitalized-name detector
+  over transcript text), not a model call; it only ever proposes, same confirmation gate as every other
+  signal in this section.
+- **Closest-device-is-you default.** The speaker cluster with the most speech energy attributed to the
+  capturing device's own microphone (the loudest/closest voice, which for a phone or watch worn/held by one
+  person is very likely them) defaults to a suggestion chip naming the device owner (`AppEnvironment
+  .selfPersonID`'s `Person.name`) — never an assignment, and it must remain correctable exactly like every
+  other chip. Doesn't apply usefully to iPad, which usually sits on a table equidistant from several speakers.
+
+### 3.3 Post-processing "Name Participants" review (requested 2026-08-20, not yet implemented)
+
+Once canonical processing finishes (stage (c) is done), the meeting offers a **Name Participants** action:
+one row per detected `SpeakerCluster`, each with a **Play sample** button that plays a clip of that cluster's
+own speech — length defaults to 10 seconds and is a user setting (Settings, not per-play) — and a name field
+the user can either type into or fill from a system Contacts picker (`CNContactPickerViewController`; read-only
+lookup, the app never writes to Contacts). Confirming a name here *is* a rename (§ 3.1's "All matching voice"
+scope is the natural default from this screen, since the whole point is naming a recurring speaker).
+
+**Propagation.** Per § 3.1, a confirmed rename already regenerates every transcript turn's displayed name; it
+must also be treated as invalidating cached display strings in the summary and action-item owner fields
+wherever they show a `personID` that changed — those are re-renders of already-generated content (the
+underlying `Insight`/`Action` records don't need re-*generation*, just re-*display*, since they reference
+`personID`/`speakerClusterID`, not baked-in name strings) — confirm this holds once `Insight`/summary
+generation is actually implemented; nothing generates summaries yet (§ 1.3), so this is unverified, not
+assumed safe.
+
+**Calendar attendees — hard platform limitation, not a design choice.** The request to add named participants
+to the meeting's calendar event (docs/07 § 4's "Calendar events for recordings") **cannot be done**: EventKit's
+public API exposes `EKEvent.attendees` as read-only — there is no supported way for an app to add `EKParticipant`
+invitees to an event it creates; that capability is reserved for the system Calendar app and CalDAV-server-side
+operations, with no exception as of the API surface available at time of writing. The only real options, if
+this is wanted: (a) don't — drop this part of the request; (b) generate a standalone `.ics` file listing
+attendees and hand it to the share sheet (the user manually sends/imports it — not automatic, not silent, and
+arguably clearer under I6 than a native calendar write would even be); (c) if a server-side calendar
+integration (`NSP-125`, `NSP-126`–`129`'s connector pattern) exists someday, add attendees through a real
+CalDAV/Graph/Google Calendar API server-side, which *can* set attendees, unlike on-device EventKit. Whichever
+path is chosen needs a product decision before implementation, not a silent pick.
+
 ---
 
 ## 4. The evidence system

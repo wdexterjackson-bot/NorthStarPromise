@@ -202,31 +202,55 @@ created event's identifier is stored on the meeting (`Meeting.calendarEventID`).
 **transcript** on the trailing side, with a draggable divider, a swap control, and a full-width mode for each.
 Audio transport is a persistent bar spanning both panes.
 
-**Note canvas during an active recording — college-ruled paper.** iPad's defining advantage over iPhone/Watch
-is notetaking during capture, so the note canvas renders as ruled notebook paper the moment a meeting goes
-`Recording`: recording controls (elapsed time, Marker, Pause, Stop — same rules as § 3.3) and writing-tool
-controls (pen/highlighter/eraser, keyboard toggle) sit in a fixed toolbar above the page; the page itself is
-ruled lines with a narrow timestamp margin on the leading edge.
+**Note-taking mode — college-ruled paper.** iPad's defining advantage over iPhone/Watch is notetaking during
+capture, so the note canvas becomes the primary view — "note-taking mode" — the moment a meeting is opened for
+notes, whether or not recording has started yet (below). A reference mockup is checked in developer-side at
+`~/Downloads/IMG_0121.PNG` (not part of the repo — describe it here so the spec doesn't depend on that file
+surviving); the description below is normative, the file is illustrative.
 
-- **Typed notes.** The first character typed on a ruled line stamps that line's margin with the meeting's
-  elapsed time at that moment (`mm:ss`, e.g. `12:04`), taken from the same monotonic sample-count timeline
-  capture uses — never wall-clock arithmetic (`docs/03`, "Timeline math"). Moving to a new line only stamps
-  the margin once that line receives its own first character; blank lines carry no stamp. The stamped moment
-  is a `NoteBlock.creationRange` start, exactly as it is for ink (below) — a typed line is a `.richText` block
-  like any other, just laid out on a ruled line instead of a free canvas.
-- **Ink.** Ink is captured into `.sketch` blocks with a `creationRange` in sample offsets. Consecutive strokes
-  close together in time and position are grouped into one margin timestamp rather than stamping every
-  individual stroke — the grouping tolerance is governed by the `NOT-002` acceptance test, same as § 5's
-  existing tap-to-seek tolerance. Palm rejection, Scribble for text blocks, and double-tap/squeeze mapped to
-  the system tool switch. Ink is never rasterized into the recap.
-- **Playback from the page.** After the meeting is saved, tapping any word in a typed line or any margin
-  timestamp seeks audio to that block's `creationRange` start and highlights the overlapping transcript turns
-  — the same tap-a-stroke-to-seek mechanism ink already uses (below), extended to typed text and to the
-  margin column itself as an equally valid tap target. Seeking never modifies the note.
+- **Header bar.** A dark, full-width toolbar, not the light chrome used elsewhere in this app. Left to right:
+  transport controls for the meeting's audio (a red Record indicator/button, skip-back-10s, Play/Pause,
+  skip-forward-10s — lets the user scrub already-recorded audio without leaving the page); a centered tool
+  palette (Selection/pointer, Text, Pen, Highlighter, Camera/insert-photo) with the active tool visibly
+  highlighted; trailing utility icons (Share/export, New page, Settings). The pen and highlighter each need a
+  colour picker — the mockup shows ink in at least green and black, highlighter in yellow.
+- **Title area.** A large, non-ruled band at the top of the page for the meeting's name — a bold large title
+  line plus an optional smaller bold subtitle line (the mockup: "Concentrix" / "Onsite Visit and QBR"). Free
+  text, not bound to the ruled grid below it.
+- **The ruled page.** White background, thin blue horizontal ruled lines below the title area. A red vertical
+  margin line inset from the leading edge separates a timestamp gutter (to its left, right-aligned) from the
+  writing area (to its right). Typed text and Apple Pencil ink coexist freely in the writing area — ink is not
+  confined to its own zone or page; it can be drawn anywhere, including across multiple ruled-line heights, the
+  same way a real notebook page mixes handwriting and diagrams. A camera tool inserts photos onto the page the
+  same way.
+- **Notes taken before recording starts.** The canvas is available before the user taps Record, not only
+  during `Recording` — this is a real, intended flow ("pre-brief" notes, agenda jotted down while waiting for
+  the meeting to start). Any content created before recording begins is stamped `--:--` in the margin, exactly
+  that literal placeholder, not `0:00` or blank. Once recording starts, new content gets real `mm:ss` stamps;
+  content already stamped `--:--` is never retroactively rewritten once recording begins — it stays `--:--`
+  permanently, an honest record that it predates the recording.
+- **Timestamp anchoring.** Every margin stamp is a `NoteBlock.creationRange` start on the canonical monotonic
+  sample-count timeline — never wall-clock arithmetic (`docs/03`, "Timeline math") — captured the moment a new
+  piece of content (a typed line, or an ink stroke group) is created. A typed line's first character stamps
+  it; a new line gets its own stamp only once it receives its own first character. Ink strokes close together
+  in time and position are grouped into one shared stamp rather than one per stroke — the grouping tolerance
+  is governed by the `NOT-002` acceptance test. Palm rejection, Scribble for text blocks, and double-tap/
+  squeeze mapped to the system tool switch. Ink is never rasterized into the recap.
+- **Playback from the page.** After the meeting is saved, tapping any word, any margin timestamp, or any ink
+  stroke seeks audio to that block's `creationRange` start and highlights the overlapping transcript turns —
+  the same tap-a-stroke-to-seek mechanism below, extended to typed text and to the margin column itself as an
+  equally valid tap target. Seeking never modifies the note. A `--:--`-stamped block has no meaningful seek
+  target (it predates the recording) — tapping it is a no-op, not an error.
 
-**Apple Pencil.** Ink is captured into `.sketch` blocks with a `creationRange` in sample offsets. Palm
-rejection, Scribble for text blocks, and double-tap/squeeze mapped to the system tool switch. Ink is never
-rasterized into the recap.
+**Implementation status (as of 2026-08-20):** `PadRootView` (the sidebar → content → detail split) and a first
+`PadRecordingCanvas` exist and are wired end to end — real `NoteBlock`s, real sample-accurate anchoring — but
+that v1 is a plain array of ruled `TextField` rows, not the mixed text/ink/photo freeform canvas this section
+now specifies, and it only appears once a meeting is `Recording`, not before. Matching this spec needs: (1) a
+genuine canvas (PencilKit `PKCanvasView` composited with positioned text blocks, not a `TextField` list) so ink
+and text can share the page and ink can span multiple line-heights; (2) making the canvas available pre-recording
+with `--:--` stamps; (3) the dark header/tool-palette redesign; (4) photo insertion. See `docs/09-BACKLOG.md`
+M4 (`NSP-099`–`NSP-110`) for the ticket breakdown — `NSP-100`/`NSP-101` (PencilKit ink + stroke-group
+timestamping) are the biggest undone pieces.
 
 **Content block types available on the canvas:** `.richText`, `.checklist`, `.decision`, `.action`, `.quote`,
 `.question`, `.code`, `.table`, `.sketch`, `.photo`, `.linkPreview`, `.file`, `.transcriptExcerpt`.

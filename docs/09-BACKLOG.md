@@ -38,6 +38,19 @@ are done **and** its acceptance condition passes on hardware.
 
 # M1 — Vertical slice
 
+**Status as of 2026-08-20:** real work so far did not follow this epic order — it went iPhone-first and
+breadth-first instead of the intended "thin slice across all three devices" shape. Built and real: Epic A
+mostly (persistence/policy foundation), Epic D's iPhone half (`NSP-037`/`NSP-038`-equivalent Today/Library/
+Meeting-detail/Notes/Audio, plus more than the slice specified — a full Actions dashboard and calendar-event
+creation, both nominally M5/later work, already exist on iPhone). **Not started:** all of Epic B (Watch
+capture — the Watch app is still the placeholder from `NSP-001`), Epic C (transfer), Epic E (transcription/
+summary — `NSPIntelligence` is protocol-only), most of Epic F (`NSP-047` typed notes is real; `NSP-048`–`051`
+are not — actions on iPhone today are user-created, not AI-extracted from anything). iPad (`NSP-039`'s intended
+scope, "read-only meeting view") instead got a first interactive shell — see `docs/09-BACKLOG.md` M4's status
+note below, which is more advanced than `NSP-039` but in a different shape than this ticket describes. Don't
+trust individual ticket checkmarks against this table without verifying against the actual code — none of these
+tickets were formally closed as work landed; this note is the accurate high-level picture.
+
 ## Epic A — Persistence and policy foundation
 
 | ID | Title | Module | Depends | Acceptance | Req |
@@ -141,6 +154,17 @@ are done **and** its acceptance condition passes on hardware.
 
 # M3 — Intelligence depth and cloud plane
 
+**Status as of 2026-08-20:** none of M3 is built — `NSPIntelligence` is still protocol definitions and
+fixture-backed mocks only (confirmed by direct source inspection this date), with nothing in `App/Phone`
+calling into it. The product-direction request that prompted the `docs/04` § 3.2/3.3 additions (name-in-address
+heuristic, closest-device-is-you default, a post-processing "Name Participants" review screen with a
+configurable voice-clip length and a Contacts picker) sits entirely on top of `NSP-075`/`NSP-076` — real
+diarization has to exist before any of that can be real rather than mocked. Read `docs/04-INTELLIGENCE.md`
+§ 3.2/3.3 before starting this milestone; it also documents a hard platform limitation discovered the same
+date — EventKit has no public API to add attendees to a calendar event, so "add named participants to the
+calendar event" needs a product decision (drop it / hand off an `.ics` file / do it server-side through a real
+calendar connector) before any of NSP-125's calendar export work touches attendees.
+
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
 | NSP-073 | Canonical batch transcription pass | NSPIntelligence | Word timings, punctuation, language spans, confidence; supersedes provisional revisions without losing them. | TRN-001 |
@@ -173,6 +197,20 @@ are done **and** its acceptance condition passes on hardware.
 ---
 
 # M4 — iPad canvas and Pencil
+
+**Status as of 2026-08-20** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written against a
+reference mockup at `~/Downloads/IMG_0121.PNG`): the iPad shell exists and is real —
+`App/Phone/RootView.swift` picks `PadRootView` vs. the iPhone `TabView` by device idiom at runtime (this is a
+universal app, not a separate target); `App/Phone/iPad/PadRootView.swift` is a working 3-column
+`NavigationSplitView` (sidebar of the five areas → content → meeting detail); `App/Phone/iPad/
+PadRecordingCanvas.swift` is a **v1** note canvas — plain ruled `TextField` rows, each backed by a real
+`.richText` `NoteBlock` anchored to a real sample offset (`Segmenter.currentSampleOffset()` /
+`CaptureEngine.currentSampleOffset()` / `RecordingSession.currentSampleOffset()`, all new, read-only, don't
+touch segment or timeline state). It does **not** yet match the mockup: no PencilKit ink, no photo insertion,
+light-chrome toolbar instead of the dark header + tool palette, and it only appears once `Recording` rather
+than being available pre-recording with `--:--` stamps. **Next step here is `NSP-100`/`NSP-101`** (PencilKit
+ink capture + stroke-group timestamping) plus the pre-recording-availability and header-redesign work docs/07
+§ 5 now specifies — none of that is started.
 
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
