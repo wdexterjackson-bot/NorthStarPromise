@@ -88,16 +88,24 @@ public final class AVAudioEngineCaptureBackend: CaptureBackend, @unchecked Senda
             throw CaptureBackendError.noInputAvailable
         }
 
+        // Fresh per `startEngine` call, not a stored property — a new
+        // recording never inherits gain state from a previous one.
+        let normalizer = AudioLoudnessNormalizer(sampleRate: format.sampleRate)
+
         input.removeTap(onBus: 0)
         // The tap block runs on the audio render thread: it only copies
         // pointers out, never allocates or awaits (docs/03 §2). Multi-
         // channel hardware is downmixed to the first channel — our target
         // is mono (docs/03 §2.1); true downmixing is a follow-up.
+        // `normalizer.process` mutates the tap's own buffer in place before
+        // the read-only view is built, so both the encoded audio and the
+        // level meter downstream see the normalized signal, not raw input.
         input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             guard let channelData = buffer.floatChannelData else { return }
             let frameLength = Int(buffer.frameLength)
-            let pointer = UnsafeBufferPointer(start: channelData[0], count: frameLength)
-            onBuffer(pointer)
+            let mutablePointer = UnsafeMutableBufferPointer(start: channelData[0], count: frameLength)
+            normalizer.process(mutablePointer)
+            onBuffer(UnsafeBufferPointer(mutablePointer))
         }
 
         engine.prepare()
