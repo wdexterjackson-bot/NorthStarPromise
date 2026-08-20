@@ -60,4 +60,30 @@ struct FakeRepositoriesTests {
         let all = try await repository.fetchAll(meetingID: meetingID)
         #expect(all.map(\.eventID) == [earlier.eventID, later.eventID])
     }
+
+    @Test func test_fakeNoteBlockRepository_insertFindUpdate() async throws {
+        let repository = FakeNoteBlockRepository()
+        let meetingID = MeetingID(rawValue: UUID())
+        let block = NoteBlock(
+            blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: PersonID(rawValue: UUID()),
+            type: .richText, content: .text("hello"), creationRange: SampleRange(startSample: 0, endSample: 1000))
+
+        try await repository.insert(block, at: Date())
+        #expect(try await repository.find(block.blockID) == block)
+
+        var updated = block
+        updated.content = .text("edited")
+        try await repository.update(updated, at: Date())
+        #expect(try await repository.find(block.blockID)?.content == .text("edited"))
+    }
+
+    @Test func test_fakeNoteBlockRepository_updateMissingRow_throws() async throws {
+        let repository = FakeNoteBlockRepository()
+        let block = NoteBlock(
+            blockID: NoteBlockID(rawValue: UUID()), meetingID: MeetingID(rawValue: UUID()),
+            authorID: PersonID(rawValue: UUID()), type: .richText, content: .text("hello"),
+            creationRange: SampleRange(startSample: 0, endSample: 1000))
+
+        await #expect(throws: PersistenceError.self) { try await repository.update(block, at: Date()) }
+    }
 }
