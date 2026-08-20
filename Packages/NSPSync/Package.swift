@@ -8,13 +8,17 @@ let package = Package(
         .library(name: "NSPSync", targets: ["NSPSync"])
     ],
     dependencies: [
-        .package(path: "../NSPTransfer")
+        .package(path: "../NSPCore"),
+        .package(path: "../NSPPolicy"),
+        .package(path: "../NSPTransfer"),
     ],
     targets: [
         .target(
             name: "NSPSync",
             dependencies: [
-                .product(name: "NSPTransfer", package: "NSPTransfer")
+                .product(name: "NSPCore", package: "NSPCore"),
+                .product(name: "NSPPolicy", package: "NSPPolicy"),
+                .product(name: "NSPTransfer", package: "NSPTransfer"),
             ],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

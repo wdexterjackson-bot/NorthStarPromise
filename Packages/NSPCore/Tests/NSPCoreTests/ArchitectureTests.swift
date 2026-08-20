@@ -14,7 +14,13 @@ import Testing
 struct ArchitectureTests {
     /// Modules allowed to import a networking framework directly
     /// (docs/10 §2: "NSPBackendClient, NSPSync, and NSPPolicy.NetworkGate").
-    static let networkImportAllowList: Set<String> = ["NSPBackendClient", "NSPSync", "NSPPolicy"]
+    /// `NSPTestSupport` is added for the same reason `NSPPolicy` is in the
+    /// dependency-direction `sideModules` set below: its fakes (e.g.
+    /// `FakeCloudKitGateway`, NSP-034) construct `CKRecord`/`CKRecordZone`
+    /// value types to stand in for the real network layer in tests — they
+    /// never perform real I/O, and the module never ships in the app
+    /// target, only in `*Tests` (project.yml).
+    static let networkImportAllowList: Set<String> = ["NSPBackendClient", "NSPSync", "NSPPolicy", "NSPTestSupport"]
 
     static let networkSymbols = ["URLSession", "Network", "CloudKit"]
 
