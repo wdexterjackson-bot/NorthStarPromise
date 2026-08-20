@@ -24,6 +24,7 @@ public final class AppEnvironment {
     public let policyRepository: any PolicyRepository
     public let workspaceRepository: any WorkspaceRepository
     public let personRepository: any PersonRepository
+    public let actionRepository: any ActionRepository
 
     public let containerRootURL: URL
     public let deviceID: DeviceID
@@ -60,6 +61,7 @@ public final class AppEnvironment {
         self.policyRepository = GRDBPolicyRepository(dbWriter: appDatabase.dbWriter)
         self.workspaceRepository = GRDBWorkspaceRepository(dbWriter: appDatabase.dbWriter)
         self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
+        self.actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
         self.containerRootURL = appSupportURL
         self.deviceID = Self.loadOrCreateDeviceID()
         self.clock = SystemClock()

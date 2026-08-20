@@ -13,14 +13,20 @@ import SwiftUI
 /// real on that platform, not just iOS.
 public enum NSPColor {
     #if os(iOS) || os(tvOS)
-        public static let background = Color(uiColor: .systemBackground)
+        public static let background = Color(uiColor: .systemGroupedBackground)
         public static let secondaryBackground = Color(uiColor: .secondarySystemBackground)
+        /// A raised card surface on top of `background` — distinct from
+        /// `secondaryBackground` so a card still reads as "raised" even when
+        /// `background` itself is a grouped (non-white) system color.
+        public static let cardBackground = Color(uiColor: .secondarySystemGroupedBackground)
     #elseif os(macOS)
         public static let background = Color(nsColor: .windowBackgroundColor)
         public static let secondaryBackground = Color(nsColor: .underPageBackgroundColor)
+        public static let cardBackground = Color(nsColor: .controlBackgroundColor)
     #else
         public static let background = Color.black
         public static let secondaryBackground = Color.gray
+        public static let cardBackground = Color.gray
     #endif
 
     public static let primaryText = Color.primary

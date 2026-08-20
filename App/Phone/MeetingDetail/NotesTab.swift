@@ -58,7 +58,6 @@ struct NotesTab: View {
                             onDelete: {
                                 Task { await delete(block) }
                             })
-                        Divider()
                     }
                 }
             }
@@ -123,9 +122,7 @@ private struct NoteBlockRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: NSPSpacing.medium) {
-            Image(systemName: block.type.symbolName)
-                .foregroundStyle(NSPColor.secondaryText)
-                .frame(width: 20)
+            NSPIconBadge(symbolName: block.type.symbolName, tint: NSPColor.statusNeutral, size: 26)
 
             VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
                 HStack(spacing: NSPSpacing.extraSmall) {
@@ -153,6 +150,7 @@ private struct NoteBlockRowView: View {
                     .foregroundStyle(NSPColor.secondaryText)
             }
         }
+        .nspCard()
         .contentShape(Rectangle())
         .onTapGesture { if canEdit { onEdit() } }
     }

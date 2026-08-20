@@ -4,11 +4,11 @@ import SwiftUI
 
 /// docs/07 §4's nine meeting-detail tabs. A horizontal tab strip rather
 /// than a native `TabView` — nine destinations don't fit a bottom tab bar
-/// legibly. Overview, Notes, and Audio are functional against real data;
-/// every other tab renders the correct "nothing here yet" state
-/// (docs/07 §11) rather than fabricated content, since transcription,
-/// summarization, actions, attachments, sharing, and the processing log
-/// aren't wired to any pipeline in this pass.
+/// legibly. Overview, Notes, Audio, and Actions are functional against
+/// real data; every other tab renders the correct "nothing here yet"
+/// state (docs/07 §11) rather than fabricated content, since
+/// transcription, summarization, attachments, sharing, and the processing
+/// log aren't wired to any pipeline in this pass.
 @MainActor
 struct MeetingDetailView: View {
     enum Tab: String, CaseIterable, Identifiable {
@@ -22,6 +22,20 @@ struct MeetingDetailView: View {
         case sharing = "Sharing"
         case processingLog = "Processing log"
         var id: String { rawValue }
+
+        var symbolName: String {
+            switch self {
+            case .overview: return "square.text.square"
+            case .notes: return "note.text"
+            case .transcript: return "text.bubble"
+            case .audio: return "waveform"
+            case .actions: return "checkmark.circle"
+            case .insights: return "lightbulb"
+            case .attachments: return "paperclip"
+            case .sharing: return "square.and.arrow.up"
+            case .processingLog: return "list.bullet.clipboard"
+            }
+        }
     }
 
     let meetingID: MeetingID
@@ -45,6 +59,7 @@ struct MeetingDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(NSPSpacing.large)
             }
+            .background(NSPColor.background)
         }
         .navigationTitle(titleText)
         .navigationBarTitleDisplayMode(.inline)
@@ -53,16 +68,20 @@ struct MeetingDetailView: View {
 
     private var tabStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: NSPSpacing.large) {
+            HStack(spacing: NSPSpacing.small) {
                 ForEach(Tab.allCases) { tab in
+                    let isSelected = selectedTab == tab
                     Button {
-                        selectedTab = tab
+                        withAnimation(.snappy(duration: 0.2)) { selectedTab = tab }
                     } label: {
-                        Text(tab.rawValue)
-                            .font(.subheadline.weight(selectedTab == tab ? .semibold : .regular))
-                            .foregroundStyle(selectedTab == tab ? NSPColor.primaryText : NSPColor.secondaryText)
+                        Label(tab.rawValue, systemImage: tab.symbolName)
+                            .font(.subheadline.weight(isSelected ? .semibold : .regular))
+                            .foregroundStyle(isSelected ? .white : NSPColor.primaryText)
+                            .padding(.horizontal, NSPSpacing.medium)
+                            .padding(.vertical, NSPSpacing.small)
+                            .background(isSelected ? NSPColor.accent : NSPColor.secondaryBackground, in: .capsule)
                     }
-                    .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
             }
             .padding(.horizontal, NSPSpacing.large)
@@ -88,9 +107,7 @@ struct MeetingDetailView: View {
             case .audio:
                 AudioTab(meeting: meeting, environment: environment)
             case .actions:
-                EmptyTabPlaceholder(
-                    title: "No actions yet", systemImage: "checkmark.circle",
-                    message: "Actions extracted from this meeting will appear here.")
+                ActionsTab(meeting: meeting, environment: environment)
             case .insights:
                 EmptyTabPlaceholder(
                     title: "No insights yet", systemImage: "lightbulb",
@@ -146,13 +163,14 @@ private struct OverviewTab: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
-            LabeledContent("Duration", value: durationLabel)
-            LabeledContent("Availability", value: availabilityLabel)
-            LabeledContent("Processing mode", value: meeting.processingMode.rawValue)
-            LabeledContent("Started", value: meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
-            MeetingStateBadge(state: meeting.lifecycleState)
-
-            Divider()
+            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                MeetingStateBadge(state: meeting.lifecycleState)
+                LabeledContent("Duration", value: durationLabel)
+                LabeledContent("Availability", value: availabilityLabel)
+                LabeledContent("Processing mode", value: meeting.processingMode.rawValue)
+                LabeledContent("Started", value: meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
+            }
+            .nspCard()
 
             EmptyTabPlaceholder(
                 title: "No recap yet", systemImage: "sparkles",

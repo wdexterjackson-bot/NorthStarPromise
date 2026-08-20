@@ -27,22 +27,39 @@ struct MeetingRow: View {
         return String(format: "%dm %02ds", totalSeconds / 60, totalSeconds % 60)
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
-            Text(displayTitle)
-                .font(.body)
-            HStack(spacing: NSPSpacing.small) {
-                Text(meeting.startedAt, style: .date)
-                if let durationLabel {
-                    Text(durationLabel)
-                }
-            }
-            .font(.caption)
-            .foregroundStyle(NSPColor.secondaryText)
-
-            MeetingStateBadge(state: meeting.lifecycleState)
+    private var captureIcon: String {
+        switch meeting.captureMode {
+        case .phone: return "iphone"
+        case .watch: return "applewatch"
+        case .pad: return "ipad"
+        case .import: return "square.and.arrow.down"
+        case .onlineAssistant: return "video.fill"
+        case .dialer: return "phone.fill"
         }
-        .padding(.vertical, NSPSpacing.extraSmall)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: NSPSpacing.medium) {
+            NSPIconBadge(symbolName: captureIcon, tint: MeetingStateBadge.appearance(for: meeting.lifecycleState).tint)
+
+            VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
+                Text(displayTitle)
+                    .font(.body.weight(.semibold))
+                HStack(spacing: NSPSpacing.small) {
+                    Text(meeting.startedAt, style: .date)
+                    if let durationLabel {
+                        Text("·")
+                        Text(durationLabel)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(NSPColor.secondaryText)
+
+                MeetingStateBadge(state: meeting.lifecycleState)
+            }
+
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -59,14 +76,14 @@ struct MeetingStateBadge: View {
 
     /// A named type in place of a 3-member tuple (SwiftLint's `large_tuple`
     /// rule caps tuples at 2).
-    private struct Appearance {
+    fileprivate struct Appearance {
         let symbol: String
         let label: String
         let tint: Color
     }
 
     // swiftlint:disable:next cyclomatic_complexity
-    private static func appearance(for state: MeetingState) -> Appearance {
+    fileprivate static func appearance(for state: MeetingState) -> Appearance {
         switch state {
         case .ready: return Appearance(symbol: "circle", label: "Ready", tint: NSPColor.statusNeutral)
         case .arming: return Appearance(symbol: "hourglass", label: "Preparing", tint: NSPColor.statusInProgress)

@@ -23,9 +23,12 @@ public struct NSPStatusBadge: View {
 
     public var body: some View {
         Label(label, systemImage: symbolName)
-            .font(.caption.weight(.medium))
+            .font(.caption.weight(.semibold))
             .foregroundStyle(tint)
             .labelStyle(.titleAndIcon)
+            .padding(.horizontal, NSPSpacing.small)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.15), in: .capsule)
             .accessibilityLabel(label)
     }
 }

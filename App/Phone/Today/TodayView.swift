@@ -16,10 +16,17 @@ struct TodayView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                nowSection
-                needsReviewSection
+            ScrollView {
+                VStack(alignment: .leading, spacing: NSPSpacing.extraLarge) {
+                    if let loadError {
+                        Text(loadError).font(.caption).foregroundStyle(NSPColor.statusDanger)
+                    }
+                    nowSection
+                    needsReviewSection
+                }
+                .padding(NSPSpacing.large)
             }
+            .background(NSPColor.background)
             .navigationTitle("Today")
             .navigationDestination(for: MeetingID.self) { meetingID in
                 MeetingDetailView(meetingID: meetingID, environment: environment)
@@ -31,38 +38,61 @@ struct TodayView: View {
 
     @ViewBuilder
     private var nowSection: some View {
-        Section("Now") {
-            switch session.state {
-            case .idle:
-                Button {
-                    Task { await session.start() }
-                } label: {
-                    Label("Start Recording", systemImage: "record.circle")
+        switch session.state {
+        case .idle:
+            startRecordingCard
+        case .arming:
+            centeredStatusCard(message: "Preparing…")
+        case .recording, .paused:
+            ActiveSessionCard(session: session)
+        case .finalizing:
+            centeredStatusCard(message: "Finishing up…")
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                NSPStatusBadge(
+                    symbolName: "exclamationmark.triangle.fill", label: "Couldn't record", tint: NSPColor.statusDanger)
+                Text(message).font(.callout).foregroundStyle(NSPColor.secondaryText)
+                Button("Try again") { session.dismissFailure() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .nspCard()
+        }
+    }
+
+    private var startRecordingCard: some View {
+        Button {
+            Task { await session.start() }
+        } label: {
+            VStack(spacing: NSPSpacing.medium) {
+                ZStack {
+                    Circle().fill(Color.red.gradient).frame(width: 88, height: 88)
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(.white)
                 }
-            case .arming:
-                HStack(spacing: NSPSpacing.small) {
-                    ProgressView()
-                    Text("Preparing…")
-                }
-            case .recording, .paused:
-                ActiveSessionCard(session: session)
-            case .finalizing:
-                HStack(spacing: NSPSpacing.small) {
-                    ProgressView()
-                    Text("Finishing up…")
-                }
-            case .failed(let message):
-                VStack(alignment: .leading, spacing: NSPSpacing.small) {
-                    NSPStatusBadge(
-                        symbolName: "exclamationmark.triangle.fill", label: "Couldn't record",
-                        tint: NSPColor.statusDanger)
-                    Text(message)
+                VStack(spacing: 2) {
+                    Text("Start Recording").font(.title3.weight(.semibold))
+                    Text("Capture audio on this iPhone")
                         .font(.caption)
                         .foregroundStyle(NSPColor.secondaryText)
-                    Button("Try again") { session.dismissFailure() }
                 }
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, NSPSpacing.extraLarge)
         }
+        .buttonStyle(.plain)
+        .nspCard()
+    }
+
+    private func centeredStatusCard(message: String) -> some View {
+        HStack(spacing: NSPSpacing.medium) {
+            ProgressView()
+            Text(message).font(.callout).foregroundStyle(NSPColor.secondaryText)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, NSPSpacing.large)
+        .nspCard()
     }
 
     @ViewBuilder
@@ -71,11 +101,14 @@ struct TodayView: View {
             $0.lifecycleState == .readyForReview || $0.lifecycleState == .partialFailure
         }
         if !needsReview.isEmpty {
-            Section("Needs review") {
+            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                Text("Needs Review")
+                    .font(.title3.weight(.bold))
                 ForEach(needsReview) { meeting in
                     NavigationLink(value: meeting.meetingID) {
-                        MeetingRow(meeting: meeting)
+                        MeetingRow(meeting: meeting).nspCard()
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

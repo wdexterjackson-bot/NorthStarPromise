@@ -65,17 +65,27 @@ struct LibraryView: View {
                     emptyFilteredState
                 } else {
                     List {
-                        Section {
-                            filterChips
-                                .listRowInsets(EdgeInsets())
-                                .listRowSeparator(.hidden)
-                        }
+                        filterChips
+                            .listRowInsets(EdgeInsets())
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                         ForEach(filteredMeetings) { meeting in
                             NavigationLink(value: meeting.meetingID) {
-                                MeetingRow(meeting: meeting)
+                                MeetingRow(meeting: meeting).nspCard()
                             }
+                            .listRowInsets(
+                                EdgeInsets(
+                                    top: NSPSpacing.extraSmall, leading: NSPSpacing.large,
+                                    bottom: NSPSpacing.extraSmall,
+                                    trailing: NSPSpacing.large)
+                            )
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                         }
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(NSPColor.background)
                 }
             }
             .navigationTitle("Library")

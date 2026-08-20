@@ -27,7 +27,6 @@ struct AudioTab: View {
             } else {
                 segmentsSection
                 if !markerEvents.isEmpty {
-                    Divider()
                     markersSection
                 }
             }
@@ -104,14 +103,18 @@ private struct SegmentRowView: View {
             Button {
                 playback.togglePlayPause(segment: segment)
             } label: {
-                Image(systemName: isCurrentlyPlaying ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.title2)
+                ZStack {
+                    Circle().fill(NSPColor.accent.gradient).frame(width: 40, height: 40)
+                    Image(systemName: isCurrentlyPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
             }
             .disabled(segment.localURL == nil)
             .buttonStyle(.plain)
 
             VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
-                Text("Segment \(segment.sequence + 1)").font(.body)
+                Text("Segment \(segment.sequence + 1)").font(.body.weight(.medium))
                 Text(durationLabel).font(.caption).foregroundStyle(NSPColor.secondaryText)
             }
 
@@ -120,6 +123,7 @@ private struct SegmentRowView: View {
             let appearance = Self.appearance(for: segment.transferState)
             NSPStatusBadge(symbolName: appearance.symbol, label: appearance.label, tint: appearance.tint)
         }
+        .nspCard()
     }
 
     private struct Appearance {
@@ -182,11 +186,12 @@ private struct MarkerRowView: View {
     var body: some View {
         Button(action: onSeek) {
             HStack(spacing: NSPSpacing.medium) {
-                Image(systemName: symbolName)
+                NSPIconBadge(symbolName: symbolName, tint: NSPColor.statusWarning, size: 26)
                 Text(label)
                 Spacer()
                 Text(timeLabel).foregroundStyle(NSPColor.secondaryText)
             }
+            .nspCard()
         }
         .buttonStyle(.plain)
     }

@@ -23,20 +23,24 @@ struct AskView: View {
     var body: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: NSPSpacing.large) {
-                Picker("Scope", selection: $scope) {
-                    ForEach(Scope.allCases) { scope in
-                        Text(scope.rawValue).tag(scope)
+                VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                    Picker("Scope", selection: $scope) {
+                        ForEach(Scope.allCases) { scope in
+                            Text(scope.rawValue).tag(scope)
+                        }
+                    }
+                    .pickerStyle(.menu)
+
+                    HStack {
+                        TextField("Ask about your meetings…", text: $queryText)
+                            .textFieldStyle(.roundedBorder)
+                            .disabled(scope == .none)
+                        Button("Ask") {}
+                            .buttonStyle(.borderedProminent)
+                            .disabled(scope == .none || queryText.isEmpty)
                     }
                 }
-                .pickerStyle(.menu)
-
-                HStack {
-                    TextField("Ask about your meetings…", text: $queryText)
-                        .textFieldStyle(.roundedBorder)
-                        .disabled(scope == .none)
-                    Button("Ask") {}
-                        .disabled(scope == .none || queryText.isEmpty)
-                }
+                .nspCard()
 
                 Spacer()
 
@@ -47,6 +51,7 @@ struct AskView: View {
                 Spacer()
             }
             .padding(NSPSpacing.large)
+            .background(NSPColor.background)
             .navigationTitle("Ask")
         }
     }
