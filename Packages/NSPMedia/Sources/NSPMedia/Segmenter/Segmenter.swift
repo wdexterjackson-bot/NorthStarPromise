@@ -153,8 +153,11 @@ public actor Segmenter {
     }
 
     /// Records a marker at the current sample offset (docs/03 §3.3)
-    /// without touching segment state.
-    public func addMarker(kind: MarkerKind) async throws {
+    /// without touching segment state. Returns that offset so a caller
+    /// anchoring a `NoteBlock` to this exact moment (docs/07 §4, "Markers
+    /// are notes") doesn't have to re-derive it.
+    @discardableResult
+    public func addMarker(kind: MarkerKind) async throws -> Int64 {
         try await recordTimelineEvent(.marker(kind: kind))
     }
 
@@ -245,17 +248,28 @@ public actor Segmenter {
 
     // MARK: - Timeline events
 
-    private func recordTimelineEvent(_ type: TimelineEventType, gapSamples: Int64? = nil) async throws {
+    /// Every other caller (`start`, `pause`, `resume`, route change,
+    /// interruption) closes and/or opens a segment immediately before
+    /// calling this, which always zeroes `samplesInCurrentSegment` — so
+    /// `cumulativeSampleCount` alone happened to be correct for them.
+    /// `addMarker` is the one caller that doesn't touch segment state, so
+    /// it needs the in-flight segment's samples added in too, or a marker
+    /// dropped mid-segment would be stamped at that segment's *start*
+    /// instead of the actual moment (up to a full rotation interval off).
+    @discardableResult
+    private func recordTimelineEvent(_ type: TimelineEventType, gapSamples: Int64? = nil) async throws -> Int64 {
+        let sampleOffset = cumulativeSampleCount + samplesInCurrentSegment
         let payload: JSONValue? = gapSamples.map { .object(["gapSamples": .number(Double($0))]) }
         let event = TimelineEvent(
             eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: deviceID, type: type,
-            sampleOffset: cumulativeSampleCount, wallClock: clock.now(), payload: payload)
+            sampleOffset: sampleOffset, wallClock: clock.now(), payload: payload)
         try await manifestWriter.append(
             .timelineEvent(
                 ManifestTimelineRecord(
                     type: event.type, sampleOffset: event.sampleOffset, wallClock: event.wallClock,
                     payload: event.payload)))
         try await timelineEventRepository.append(event, at: clock.now())
+        return sampleOffset
     }
 
     private func gapSamplesSincePause() -> Int64 {

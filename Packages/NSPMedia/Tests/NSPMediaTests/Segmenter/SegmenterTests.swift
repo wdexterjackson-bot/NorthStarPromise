@@ -228,6 +228,19 @@ struct SegmenterTests {
         #expect(events.contains { $0.type == .marker(kind: .important) })
     }
 
+    @Test func test_addMarker_midSegment_returnsAndRecordsTheInFlightSampleOffsetNotTheSegmentStart() async throws {
+        let fixture = try await Self.makeFixture()
+        try await fixture.segmenter.beginRecording()
+        try await fixture.segmenter.append(samples: [Float](repeating: 0.1, count: 30))
+
+        let offset = try await fixture.segmenter.addMarker(kind: .actionItem)
+
+        #expect(offset == 30)
+        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let markerEvent = events.first { $0.type == .marker(kind: .actionItem) }
+        #expect(markerEvent?.sampleOffset == 30)
+    }
+
     @Test func test_stop_persistsEverySegmentToTheRepository() async throws {
         let fixture = try await Self.makeFixture()
         try await fixture.segmenter.beginRecording()

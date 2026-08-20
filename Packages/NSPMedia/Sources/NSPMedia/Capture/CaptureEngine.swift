@@ -98,9 +98,13 @@ public actor CaptureEngine {
         try await segmenter.resume()
     }
 
-    public func addMarker(kind: MarkerKind) async throws {
+    /// Returns the sample offset the marker was recorded at, so a caller
+    /// creating a `NoteBlock` for it (docs/07 §4) anchors to the exact
+    /// moment rather than re-deriving it.
+    @discardableResult
+    public func addMarker(kind: MarkerKind) async throws -> Int64 {
         guard isCapturing, let segmenter else { throw CaptureEngineError.notCapturing }
-        try await segmenter.addMarker(kind: kind)
+        return try await segmenter.addMarker(kind: kind)
     }
 
     /// Route change (docs/03 §2.3) — forwarded from whatever observes

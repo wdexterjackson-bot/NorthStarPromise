@@ -10,6 +10,7 @@ import SwiftUI
 struct ActiveSessionCard: View {
     let session: RecordingSession
     @State private var isConfirmingStop = false
+    @State private var isShowingMarkers = false
 
     private var elapsedLabel: String {
         let totalSeconds = Int(session.elapsedSeconds)
@@ -40,8 +41,13 @@ struct ActiveSessionCard: View {
             HStack(spacing: NSPSpacing.medium) {
                 Label("Recording on this iPhone", systemImage: "iphone")
                 if session.markerCount > 0 {
-                    Label(
-                        "\(session.markerCount) marker\(session.markerCount == 1 ? "" : "s")", systemImage: "flag.fill")
+                    Button {
+                        isShowingMarkers = true
+                    } label: {
+                        Label(
+                            "\(session.markerCount) marker\(session.markerCount == 1 ? "" : "s")",
+                            systemImage: "flag.fill")
+                    }
                 }
             }
             .font(.caption)
@@ -49,7 +55,10 @@ struct ActiveSessionCard: View {
 
             HStack(spacing: NSPSpacing.medium) {
                 Button {
-                    Task { await session.addMarker() }
+                    Task {
+                        await session.addMarker()
+                        isShowingMarkers = true
+                    }
                 } label: {
                     Label("Marker", systemImage: "flag")
                         .frame(maxWidth: .infinity)
@@ -92,6 +101,9 @@ struct ActiveSessionCard: View {
                 Task { await session.stop() }
             }
             Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $isShowingMarkers) {
+            MarkerListSheet(session: session)
         }
     }
 }
