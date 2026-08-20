@@ -36,6 +36,10 @@ Our two structural differentiators, in priority order:
 
 1. **The Watch is a real recorder.** Not a remote. A meeting that starts on the wrist survives an absent phone,
    no network, and a crash. Competitors either lack Watch capture or treat the Watch as a trigger.
+   (This is about what the Watch *is*, not a restriction on what it can *also* do: it separately offers
+   optional remote control — Pause/Marker/Stop — of an iPhone- or iPad-driven recording, so a hand is never
+   forced to reach for the other device mid-meeting. That control surface is additive convenience, never the
+   Watch's own recording authority — see `docs/03` § 11.)
 2. **Local-first with an auditable privacy boundary.** The canonical store is the user's devices and their
    private iCloud. Cloud AI is opt-in, per meeting, ephemeral, and verifiable by network inspection.
 

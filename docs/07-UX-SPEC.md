@@ -90,6 +90,13 @@ compressed into a single status row and expand on Digital Crown scroll.
 | **Finalizing** | "Finalizing… n of m segments sealed", non-cancellable, no Stop | On completion → `SavedRaw` confirmation card: "Saved on Watch — n segments" with transfer state |
 | **History** | Last 20 meetings: relative time, canonical duration, `Availability`, `TransferState` badge, storage used | Tap a row → read-only detail (state, duration, segment count, transfer state, Retry transfer, Delete). Swipe = Delete, gated by § 8 rules |
 
+**Remote-control mode.** When the iPhone owns the mic, the Watch's `Recording`/`Paused` screens above render
+identically but are captioned "Controlling iPhone" instead of "Recording" — the Watch is not capturing audio
+in this mode, and the caption must never imply it is (I1's display-honesty spirit, `docs/03` § 11). Marker,
+Pause, and Stop send the command to the phone rather than acting locally, and only update the Watch's own
+state display after the phone acknowledges. There is no equivalent for an iPad-owned recording — the Watch
+cannot control iPad (`docs/03` § 11).
+
 ### 3.3 Stop rule (normative)
 
 Stop is a **visible, labelled control** on `Recording`, `Paused`, and `Interrupted`. Tapping it presents a
@@ -133,6 +140,16 @@ as § 3.3), capture-device attribution ("Recording on Apple Watch — this iPhon
 provisional transcript if enabled (rendered per § 7), and a processing-mode chip showing the frozen
 `ProcessingMode`. The Live Activity mirrors elapsed time, device, and marker count; it never offers Stop.
 
+**Markers are notes, not just timestamps.** iPhone has no ruled-paper canvas to write on mid-meeting (§ 5's
+iPad-only capability), so a Marker is the iPhone equivalent: dropping one immediately shows it in a dismissible
+in-session list the user can rename with a short label right there, or leave untitled and fill in later from
+the Meeting → Notes tab. Every marker is a `NoteBlock` (`type == .action` or `.richText` depending on what the
+user picked at creation) anchored to the marker's `creationRange`, editable and deletable the same as any note
+(§ 4's Notes tab) — never a bare, unlabeled timeline dot the user can't later explain. Marker-originated notes
+are ordinary evidence input to summary and action-item generation (`docs/04`): a marker labelled "follow up
+with Legal" is exactly the kind of human-authored signal `NSP-048`'s action extraction should weight alongside
+transcript spans, not a separate, second-class annotation.
+
 **Meeting detail tabs.**
 
 | Tab | Contents | Notes |
@@ -174,6 +191,28 @@ state, quota, last change token time), Integrations, Accessibility, Diagnostics 
 **Layout.** Sidebar → meeting list → detail. Detail is a split canvas: **note canvas** on the leading side,
 **transcript** on the trailing side, with a draggable divider, a swap control, and a full-width mode for each.
 Audio transport is a persistent bar spanning both panes.
+
+**Note canvas during an active recording — college-ruled paper.** iPad's defining advantage over iPhone/Watch
+is notetaking during capture, so the note canvas renders as ruled notebook paper the moment a meeting goes
+`Recording`: recording controls (elapsed time, Marker, Pause, Stop — same rules as § 3.3) and writing-tool
+controls (pen/highlighter/eraser, keyboard toggle) sit in a fixed toolbar above the page; the page itself is
+ruled lines with a narrow timestamp margin on the leading edge.
+
+- **Typed notes.** The first character typed on a ruled line stamps that line's margin with the meeting's
+  elapsed time at that moment (`mm:ss`, e.g. `12:04`), taken from the same monotonic sample-count timeline
+  capture uses — never wall-clock arithmetic (`docs/03`, "Timeline math"). Moving to a new line only stamps
+  the margin once that line receives its own first character; blank lines carry no stamp. The stamped moment
+  is a `NoteBlock.creationRange` start, exactly as it is for ink (below) — a typed line is a `.richText` block
+  like any other, just laid out on a ruled line instead of a free canvas.
+- **Ink.** Ink is captured into `.sketch` blocks with a `creationRange` in sample offsets. Consecutive strokes
+  close together in time and position are grouped into one margin timestamp rather than stamping every
+  individual stroke — the grouping tolerance is governed by the `NOT-002` acceptance test, same as § 5's
+  existing tap-to-seek tolerance. Palm rejection, Scribble for text blocks, and double-tap/squeeze mapped to
+  the system tool switch. Ink is never rasterized into the recap.
+- **Playback from the page.** After the meeting is saved, tapping any word in a typed line or any margin
+  timestamp seeks audio to that block's `creationRange` start and highlights the overlapping transcript turns
+  — the same tap-a-stroke-to-seek mechanism ink already uses (below), extended to typed text and to the
+  margin column itself as an equally valid tap target. Seeking never modifies the note.
 
 **Apple Pencil.** Ink is captured into `.sketch` blocks with a `creationRange` in sample offsets. Palm
 rejection, Scribble for text blocks, and double-tap/squeeze mapped to the system tool switch. Ink is never

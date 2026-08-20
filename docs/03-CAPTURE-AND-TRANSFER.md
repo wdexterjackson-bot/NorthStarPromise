@@ -431,6 +431,18 @@ propagated via `updateApplicationContext` (Watch↔phone) and CloudKit (phone↔
 | iPad opened during a Watch recording | iPad shows the meeting as live and read-only, with an explicit "relayed via iPhone — may lag" note; it cannot pause/stop the Watch (no Watch↔iPad path) and cannot start its own recording without taking over. |
 | Two phones on one account | Lease conflict resolved by earliest `startedAt`; the loser is offered "record separately". |
 
+**Remote control from the Watch.** When the *phone* owns the mic (not the Watch), the Watch app shows Pause/
+Marker/Stop for that session instead of its own Ready screen — the reverse direction from the row above, and
+the Watch's one additional role beyond standalone recording (`docs/00`'s "not a remote" differentiator is about
+what records the audio, not about this control surface). Commands travel over the same `updateApplicationContext`
+channel as the ownership lease, so they carry the lease's reachability characteristics: best-effort, not
+guaranteed instant, and the Watch UI reflects actual confirmed state (e.g. `Paused`) only after the phone acks,
+never optimistically (I1's spirit applies to state *display* here even though no audio is at stake). **This
+does not extend to iPad**: there is no Watch↔iPad WatchConnectivity path (`CLAUDE.md` § 6), and relaying watch
+commands through the phone or through CloudKit would add enough latency to make Pause/Stop unreliable for their
+purpose — an iPad-driven recording is controlled from the iPad (and, if the iPhone is also present, from the
+iPhone), never from the Watch.
+
 ---
 
 ## 12. Import path
