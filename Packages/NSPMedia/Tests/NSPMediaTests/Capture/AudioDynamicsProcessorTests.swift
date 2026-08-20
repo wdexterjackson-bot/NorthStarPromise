@@ -3,8 +3,8 @@ import Testing
 
 @testable import NSPMedia
 
-@Suite("AudioLoudnessNormalizer")
-struct AudioLoudnessNormalizerTests {
+@Suite("AudioDynamicsProcessor")
+struct AudioDynamicsProcessorTests {
     private static let sampleRate = 48000.0
     private static let blockSize = 1024
 
@@ -33,19 +33,21 @@ struct AudioLoudnessNormalizerTests {
         return 20 * log10(max(rms, 1e-9))
     }
 
-    private static func process(_ normalizer: AudioLoudnessNormalizer, _ block: [Float]) -> [Float] {
+    private static func process(_ processor: AudioDynamicsProcessor, _ block: [Float]) -> [Float] {
         var mutableBlock = block
-        mutableBlock.withUnsafeMutableBufferPointer { normalizer.process($0) }
+        mutableBlock.withUnsafeMutableBufferPointer { processor.process($0) }
         return mutableBlock
     }
 
+    // MARK: - AGC (speech zone: at/above the -35dB expander threshold)
+
     @Test func test_process_quietSteadyTone_convergesTowardTargetLevel() {
-        let normalizer = AudioLoudnessNormalizer(sampleRate: Self.sampleRate)
-        let blocks = Self.toneBlocks(decibels: -40, blockCount: 60)
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        let blocks = Self.toneBlocks(decibels: -30, blockCount: 60)
 
         var lastOutput: [Float] = []
         for block in blocks {
-            lastOutput = Self.process(normalizer, block)
+            lastOutput = Self.process(processor, block)
         }
 
         // Default target is -20dB; allow a few dB tolerance for the sine
@@ -54,12 +56,12 @@ struct AudioLoudnessNormalizerTests {
     }
 
     @Test func test_process_loudTone_isReducedTowardTargetAndNeverClips() {
-        let normalizer = AudioLoudnessNormalizer(sampleRate: Self.sampleRate)
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
         let blocks = Self.toneBlocks(decibels: -3, blockCount: 60)
 
         var lastOutput: [Float] = []
         for block in blocks {
-            lastOutput = Self.process(normalizer, block)
+            lastOutput = Self.process(processor, block)
             for sample in lastOutput {
                 #expect(sample >= -1 && sample <= 1)
             }
@@ -68,32 +70,17 @@ struct AudioLoudnessNormalizerTests {
         #expect(Self.rmsDecibels(lastOutput) < -3)
     }
 
-    @Test func test_process_silenceBelowNoiseGate_isNotSignificantlyAmplified() {
-        let normalizer = AudioLoudnessNormalizer(sampleRate: Self.sampleRate)
-        let blocks = Self.toneBlocks(decibels: -70, blockCount: 30)
-
-        var lastOutput: [Float] = []
-        for block in blocks {
-            lastOutput = Self.process(normalizer, block)
-        }
-
-        // Gain should have stayed near unity (0dB) rather than chasing the
-        // target — output level should still be close to the input's -70dB,
-        // not boosted toward -20dB.
-        #expect(Self.rmsDecibels(lastOutput) < -50)
-    }
-
     @Test func test_process_suddenLoudBurstAfterQuiet_neverExceedsSafetyBounds() {
-        let normalizer = AudioLoudnessNormalizer(sampleRate: Self.sampleRate)
-        // Let gain climb toward maxGain against a quiet, steady tone first.
-        for block in Self.toneBlocks(decibels: -40, blockCount: 80) {
-            _ = Self.process(normalizer, block)
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        // Let gain climb against a quiet, steady speech-zone tone first.
+        for block in Self.toneBlocks(decibels: -30, blockCount: 80) {
+            _ = Self.process(processor, block)
         }
 
         // Now an abrupt full-scale block — the safety clamp, not the slew
         // (which can't react within one block), must hold the line.
         let loudBlock = Self.toneBlocks(decibels: 0, blockCount: 1).first!
-        let output = Self.process(normalizer, loudBlock)
+        let output = Self.process(processor, loudBlock)
 
         for sample in output {
             #expect(sample >= -1 && sample <= 1)
@@ -101,12 +88,12 @@ struct AudioLoudnessNormalizerTests {
     }
 
     @Test func test_process_gainChangesSmoothly_noAbruptJumpBetweenBlocks() {
-        let normalizer = AudioLoudnessNormalizer(sampleRate: Self.sampleRate)
-        let blocks = Self.toneBlocks(decibels: -40, blockCount: 40)
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        let blocks = Self.toneBlocks(decibels: -30, blockCount: 40)
 
         var previousRatio: Float?
         for block in blocks {
-            let output = Self.process(normalizer, block)
+            let output = Self.process(processor, block)
             // The effective gain this block applied, inferred from the
             // ratio of output to input peak amplitude.
             let inputPeak = block.map { abs($0) }.max() ?? 0
@@ -122,5 +109,55 @@ struct AudioLoudnessNormalizerTests {
             }
             previousRatio = ratio
         }
+    }
+
+    // MARK: - Noise gate (below -50dB) and expander (-50dB to -35dB)
+
+    @Test func test_process_silenceBelowNoiseGate_isNotSignificantlyAmplified() {
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        let blocks = Self.toneBlocks(decibels: -70, blockCount: 30)
+
+        var lastOutput: [Float] = []
+        for block in blocks {
+            lastOutput = Self.process(processor, block)
+        }
+
+        // Gain should have stayed near unity (0dB) rather than chasing the
+        // target — output level should still be close to the input's -70dB,
+        // not boosted toward -20dB.
+        #expect(Self.rmsDecibels(lastOutput) < -50)
+    }
+
+    @Test func test_process_toneInExpansionZone_isAttenuatedRatherThanBoostedTowardTarget() {
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        // -42dB sits between the -50dB noise gate and the -35dB expander
+        // threshold — "probably background noise, not speech."
+        let blocks = Self.toneBlocks(decibels: -42, blockCount: 80)
+
+        var lastOutput: [Float] = []
+        for block in blocks {
+            lastOutput = Self.process(processor, block)
+        }
+
+        let outputDecibels = Self.rmsDecibels(lastOutput)
+        // Plain AGC would have pulled this up toward the -20dB target —
+        // the expander must push it down below its own -42dB input instead.
+        #expect(outputDecibels < -42)
+        #expect(outputDecibels < -30)
+    }
+
+    @Test func test_process_toneAtSpeechZoneBoundary_stillConvergesTowardTarget() {
+        let processor = AudioDynamicsProcessor(sampleRate: Self.sampleRate)
+        // -30dB is above the -35dB expander threshold — squarely in the
+        // "probably speech" zone — so it should behave like plain AGC,
+        // unaffected by the expander.
+        let blocks = Self.toneBlocks(decibels: -30, blockCount: 80)
+
+        var lastOutput: [Float] = []
+        for block in blocks {
+            lastOutput = Self.process(processor, block)
+        }
+
+        #expect(abs(Self.rmsDecibels(lastOutput) - (-20)) < 3)
     }
 }
