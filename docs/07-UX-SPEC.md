@@ -242,18 +242,26 @@ surviving); the description below is normative, the file is illustrative.
   equally valid tap target. Seeking never modifies the note. A `--:--`-stamped block has no meaningful seek
   target (it predates the recording) — tapping it is a no-op, not an error.
 
-**Implementation status (updated 2026-08-20, v2):** `PadRootView` and `PadRecordingCanvas` are wired end to end
-with real `NoteBlock`s and real sample-accurate anchoring, now closer to this section's spec: a dark two-row
-header (`PadCanvasHeader`) with real recording controls and a tool palette (Pointer/Text/Pen are functional;
-Highlighter/Camera/Share/New page/Settings are drawn to match the mockup's shape but are honestly disabled, not
-fake-functional), an editable large title band bound to `Meeting.title`, a red margin rule over ruled lines,
-and real Apple Pencil ink via `PKCanvasView` (`PadInkCanvas`) persisted as a `.sketch` `NoteBlock` referencing
-a `.drawing` asset file under the meeting container's `ink/` directory. **Still not matching the spec:** ink is
-one page-wide layer, not per-stroke-group timestamps (`NOT-002`'s grouping tolerance is unbuilt — there's no
-margin stamp for ink yet); no photo insertion; no multi-page; the canvas still only appears once a meeting is
-`Recording`, not before (`--:--` pre-recording notes need a "start a draft meeting before recording" entry flow
-that doesn't exist and needs a product decision, not just an engineering pass). See `docs/09-BACKLOG.md` M4
-(`NSP-099`–`NSP-110`) for the ticket breakdown — `NSP-101` (stroke-group timestamping) is the biggest gap left.
+**Implementation status (updated 2026-08-20, v3):** `PadRootView` and `PadRecordingCanvas` are wired end to end
+with real `NoteBlock`s and real sample-accurate anchoring: a dark two-row header (`PadCanvasHeader`) with real
+recording controls and a tool palette (Pointer/Text/Pen are functional; Highlighter/Camera/Share/New page/
+Settings are drawn to match the mockup's shape but are honestly disabled, not fake-functional), an editable
+large title band bound to `Meeting.title`, a red margin rule over ruled lines, and real Apple Pencil ink via
+`PKCanvasView` (`PadInkCanvas`). **`NSP-101` (stroke-group timestamping) is now built:** `StrokeGroupTracker`
+(`NSPMedia`) groups newly-drawn strokes by time and position (`NOT-002`'s tolerance — unit-tested), and each
+closed group persists as its own `.sketch` `NoteBlock` with an accurate `creationRange`, referencing its own
+`.drawing` asset under the meeting container's `ink/` directory via `InkAssetFileSystem` (atomic write, also
+unit-tested) — ink is no longer one page-wide block. **Pre-recording availability is also built:**
+`RecordingSession` has a `.draft` state (`prepareDraft`) that creates a real, notes-capable `Meeting` before
+capture starts; Today's "New Note (before recording)" button (iPad only) enters it, `PadRootView` shows the
+canvas for a drafting meeting the same as a recording one, and `PadCanvasHeader` swaps in a plain "Start
+Recording" control while drafting. Content created pre-recording is permanently stamped `--:--` (a synthetic
+negative sample-offset timeline distinguishes it from a real `0:00`, since `NoteBlock` has no dedicated field
+for this) and is never rewritten once recording begins, matching this section's wording exactly. **Still not
+matching the spec:** no visible per-ink-group margin stamp on the page itself (the data is correct and
+seekable once `NSP-102` exists; there's just no UI chip next to each group yet); no photo insertion; no
+multi-page. See `docs/09-BACKLOG.md` M4 (`NSP-099`–`NSP-110`) — `NSP-102` (tap-a-stroke-to-seek) is the
+biggest gap left.
 
 **Content block types available on the canvas:** `.richText`, `.checklist`, `.decision`, `.action`, `.quote`,
 `.question`, `.code`, `.table`, `.sketch`, `.photo`, `.linkPreview`, `.file`, `.transcriptExcerpt`.

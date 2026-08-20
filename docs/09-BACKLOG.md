@@ -161,9 +161,9 @@ heuristic, closest-device-is-you default, a post-processing "Name Participants" 
 configurable voice-clip length and a Contacts picker) sits entirely on top of `NSP-075`/`NSP-076` — real
 diarization has to exist before any of that can be real rather than mocked. Read `docs/04-INTELLIGENCE.md`
 § 3.2/3.3 before starting this milestone; it also documents a hard platform limitation discovered the same
-date — EventKit has no public API to add attendees to a calendar event, so "add named participants to the
-calendar event" needs a product decision (drop it / hand off an `.ics` file / do it server-side through a real
-calendar connector) before any of NSP-125's calendar export work touches attendees.
+date — EventKit has no public API to add attendees to a calendar event. **Resolved 2026-08-20: dropped** —
+calendar events stay title/start/end only; no attendee work is planned unless a real server-side calendar
+connector (`NSP-125`+) is built later. No code changed as a result.
 
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
@@ -198,20 +198,21 @@ calendar connector) before any of NSP-125's calendar export work touches attende
 
 # M4 — iPad canvas and Pencil
 
-**Status as of 2026-08-20, updated (v2)** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written
+**Status as of 2026-08-20, updated (v3)** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written
 against a reference mockup at `~/Downloads/IMG_0121.PNG`): the iPad shell exists and is real —
 `App/Phone/RootView.swift` picks `PadRootView` vs. the iPhone `TabView` by device idiom at runtime (this is a
 universal app, not a separate target); `App/Phone/iPad/PadRootView.swift` is a working 3-column
 `NavigationSplitView` (sidebar of the five areas → content → meeting detail). `App/Phone/iPad/
-PadRecordingCanvas.swift` now has the dark header + tool palette (`PadCanvasHeader`; Pointer/Text/Pen real,
-the rest honestly disabled), an editable title band, the red margin rule, and **real PencilKit ink**
-(`PadInkCanvas`, `NSP-100`) persisted as a `.sketch` `NoteBlock` referencing an asset file in the meeting
-container's `ink/` directory — plus the v1 typed-line editor, each ruled line still a real `.richText`
-`NoteBlock` anchored to a real sample offset (`Segmenter`/`CaptureEngine`/`RecordingSession
-.currentSampleOffset()`, read-only, don't touch segment or timeline state). **Still not built:** `NSP-101`
-stroke-group timestamping (ink is one page-wide layer with no margin stamp of its own yet — the biggest
-remaining gap); photo insertion; multi-page; pre-recording availability with `--:--` stamps (needs a "start a
-draft meeting before recording" entry flow that doesn't exist — a product decision, not just engineering).
+PadRecordingCanvas.swift` has the dark header + tool palette (`PadCanvasHeader`; Pointer/Text/Pen real, the
+rest honestly disabled), an editable title band, the red margin rule, real Apple Pencil ink (`PadInkCanvas`,
+`NSP-100`), **and now `NSP-101`**: `StrokeGroupTracker` + `InkAssetFileSystem` (both in `NSPMedia`, both
+unit-tested) group strokes by time/position and persist each closed group as its own `.sketch` `NoteBlock`
+with an accurate `creationRange`, rather than one page-wide block. **Pre-recording availability is also now
+built**, resolving what was previously flagged as needing a product decision: `RecordingSession.prepareDraft`
+creates a real, notes-capable `Meeting` before capture starts (a new `.draft` state), Today's "New Note
+(before recording)" button (iPad only) enters it, and content created there is permanently stamped `--:--`.
+Still not built: `NSP-102` tap-a-stroke-to-seek (the ink-group data is correct and ready for this, just no
+seek UI yet); no visible per-group margin chip for ink on the page itself; photo insertion; multi-page.
 Not yet visually verified in Simulator beyond build/lint/test passing — this environment has no UI-automation
 path to tap "Start Recording" and navigate into the canvas for a live screenshot; verify on a real device or
 via manual Simulator interaction before trusting the visual result matches the mockup.

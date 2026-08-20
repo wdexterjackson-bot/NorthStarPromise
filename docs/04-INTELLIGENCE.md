@@ -272,17 +272,17 @@ underlying `Insight`/`Action` records don't need re-*generation*, just re-*displ
 generation is actually implemented; nothing generates summaries yet (§ 1.3), so this is unverified, not
 assumed safe.
 
-**Calendar attendees — hard platform limitation, not a design choice.** The request to add named participants
-to the meeting's calendar event (docs/07 § 4's "Calendar events for recordings") **cannot be done**: EventKit's
-public API exposes `EKEvent.attendees` as read-only — there is no supported way for an app to add `EKParticipant`
-invitees to an event it creates; that capability is reserved for the system Calendar app and CalDAV-server-side
-operations, with no exception as of the API surface available at time of writing. The only real options, if
-this is wanted: (a) don't — drop this part of the request; (b) generate a standalone `.ics` file listing
-attendees and hand it to the share sheet (the user manually sends/imports it — not automatic, not silent, and
-arguably clearer under I6 than a native calendar write would even be); (c) if a server-side calendar
-integration (`NSP-125`, `NSP-126`–`129`'s connector pattern) exists someday, add attendees through a real
-CalDAV/Graph/Google Calendar API server-side, which *can* set attendees, unlike on-device EventKit. Whichever
-path is chosen needs a product decision before implementation, not a silent pick.
+**Calendar attendees — hard platform limitation, resolved 2026-08-20: dropped.** The request to add named
+participants to the meeting's calendar event (docs/07 § 4's "Calendar events for recordings") **cannot be
+done** on-device: EventKit's public API exposes `EKEvent.attendees` as read-only — there is no supported way
+for an app to add `EKParticipant` invitees to an event it creates; that capability is reserved for the system
+Calendar app and CalDAV-server-side operations, with no exception as of the API surface available at time of
+writing. Three options existed — (a) drop it, (b) hand off a standalone `.ics` file via the share sheet, (c)
+add attendees server-side through a future calendar connector (`NSP-125`+) — and the product decision is **(a):
+calendar events created by this app carry title/start/end only**, matching exactly what
+`CalendarEventWriter`/`EventKitCalendarEventWriter`/`CalendarEventConfirmationView` already implement; no code
+changed as a result of this decision. Revisit only if a real server-side calendar connector (option c) is ever
+built, since that is the one path that could actually set attendees.
 
 ---
 
