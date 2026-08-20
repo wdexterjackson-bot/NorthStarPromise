@@ -1,22 +1,31 @@
 import NSPCore
 import NSPDesignSystem
+import PencilKit
 import SwiftUI
 
-/// iPad's signature capability (docs/07 §5): a college-ruled notebook page
-/// that appears the moment a meeting goes `Recording`. Recording controls
-/// live in a fixed top toolbar; the page below is ruled lines with a
-/// timestamp margin. The first character typed on a line stamps that
-/// line's margin with elapsed time at that instant (`mm:ss`) — a new line
-/// gets its own stamp only once it receives its own first character. Each
-/// line is a real `.richText` `NoteBlock` anchored to the exact sample
-/// offset it was started at (`RecordingSession.currentSampleOffset()`),
-/// not the wall-clock label shown in the margin — the same "display uses
-/// elapsed seconds, persistence uses the real sample offset" split
-/// `SessionMarker` uses on iPhone.
+/// The writing tool currently active on `PadRecordingCanvas` — shared with
+/// `PadCanvasHeader`, which renders the palette that sets it.
+enum PadTool: Equatable {
+    case pointer, text, pen
+}
+
+/// iPad's signature capability (docs/07 §5, written against a reference
+/// mockup — see that doc for the full description): a college-ruled
+/// notebook page that appears while a meeting is recording. A dark header
+/// (`PadCanvasHeader`) carries recording controls and a writing-tool
+/// palette; the page below is ruled lines with a red margin rule and a
+/// timestamp gutter. Typed lines and Apple Pencil ink both anchor to the
+/// real sample offset they were created at
+/// (`RecordingSession.currentSampleOffset()`), not the wall-clock label
+/// shown in the margin.
 ///
-/// Apple Pencil ink capture (stroke grouping into margin timestamps,
-/// `docs/07 §5`) is a documented follow-up, not built in this pass — this
-/// canvas is the typed-notes half of that spec.
+/// Scope of this pass, honestly: one page's worth of ink as a single
+/// `.sketch` block (not per-stroke-group timestamps — `NOT-002`'s
+/// grouping tolerance is a follow-up), no photo insertion, no
+/// highlighter, no multi-page. Pre-recording availability (the canvas
+/// showing before the user taps Record, with `--:--` stamps) also isn't
+/// built — this pass only covers the already-recording case, since that's
+/// the state `PadRootView` currently routes here for.
 @MainActor
 struct PadRecordingCanvas: View {
     let environment: AppEnvironment
@@ -26,27 +35,29 @@ struct PadRecordingCanvas: View {
     @FocusState private var focusedLineID: UUID?
     @State private var isConfirmingStop = false
     @State private var loadError: String?
+    @State private var activeTool: PadTool = .pointer
+    @State private var meetingTitle = ""
+    @State private var drawing = PKDrawing()
+    @State private var inkBlock: NoteBlock?
+    @State private var inkSaveTask: Task<Void, Never>?
 
     var body: some View {
         VStack(spacing: 0) {
-            toolbar
-            Divider()
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach($lines) { $line in
-                        PadNoteLineRow(line: $line, focusedLineID: $focusedLineID)
-                            .onChange(of: line.text) { oldValue, newValue in
-                                Task { await handleTextChange(lineID: line.id, oldValue: oldValue, newValue: newValue) }
-                            }
-                            .onSubmit { addLine(after: line.id) }
-                    }
-                }
-                .padding(.horizontal, NSPSpacing.large)
-                .padding(.top, NSPSpacing.large)
+            PadCanvasHeader(
+                session: session, activeTool: $activeTool, isConfirmingStop: $isConfirmingStop,
+                onSelectNonPenTool: { focusedLineID = focusedLineID ?? lines.first?.id })
+            ZStack(alignment: .topLeading) {
+                page
+                PadInkCanvas(drawing: $drawing, isActive: activeTool == .pen, onDrawingChanged: handleDrawingChange)
+                    .allowsHitTesting(activeTool == .pen)
             }
-            .background(NSPColor.background)
         }
-        .task { await loadExistingLines() }
+        .background(NSPColor.background)
+        .task {
+            await loadMeetingTitle()
+            await loadExistingLines()
+            await loadExistingInk()
+        }
         .onAppear { focusedLineID = lines.first?.id }
         .confirmationDialog(
             "Stop recording?", isPresented: $isConfirmingStop, titleVisibility: .visible
@@ -58,58 +69,66 @@ struct PadRecordingCanvas: View {
         }
     }
 
-    private var elapsedLabel: String {
-        let totalSeconds = Int(session.elapsedSeconds)
-        return String(format: "%02d:%02d:%02d", totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60)
-    }
+    // MARK: - Page
 
-    private var isPaused: Bool { session.state == .paused }
+    private var page: some View {
+        ScrollView {
+            TextField("Meeting name", text: $meetingTitle)
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .multilineTextAlignment(.center)
+                .textFieldStyle(.plain)
+                .onSubmit { Task { await saveMeetingTitle() } }
+                .padding(.top, NSPSpacing.extraLarge)
+                .padding(.bottom, NSPSpacing.large)
+                .frame(maxWidth: .infinity)
 
-    private var toolbar: some View {
-        HStack(spacing: NSPSpacing.large) {
-            Text(elapsedLabel).font(.title2.monospacedDigit().weight(.bold))
-
-            if isPaused {
-                NSPStatusBadge(symbolName: "pause.circle.fill", label: "Paused", tint: NSPColor.statusWarning)
-            } else {
-                NSPStatusBadge(symbolName: "record.circle.fill", label: "Recording", tint: NSPColor.statusDanger)
-            }
-
-            NSPLevelMeter(level: session.inputLevel, segmentCount: 14).frame(width: 140)
-
-            Spacer()
-
-            Button {
-                Task { await session.addMarker() }
-            } label: {
-                Label("Marker", systemImage: "flag")
-            }
-            .disabled(session.state != .recording)
-
-            if isPaused {
-                Button {
-                    Task { await session.resume() }
-                } label: {
-                    Label("Resume", systemImage: "play.fill")
-                }
-            } else {
-                Button {
-                    Task { await session.pause() }
-                } label: {
-                    Label("Pause", systemImage: "pause.fill")
+            LazyVStack(spacing: 0) {
+                ForEach($lines) { $line in
+                    PadNoteLineRow(line: $line, focusedLineID: $focusedLineID)
+                        .onChange(of: line.text) { oldValue, newValue in
+                            Task { await handleTextChange(lineID: line.id, oldValue: oldValue, newValue: newValue) }
+                        }
+                        .onSubmit { addLine(after: line.id) }
                 }
             }
-
-            Button(role: .destructive) {
-                isConfirmingStop = true
-            } label: {
-                Label("Stop", systemImage: "stop.fill")
-            }
+            .padding(.horizontal, NSPSpacing.large)
+            .frame(minHeight: 1400, alignment: .top)
+            .background(alignment: .topLeading) { marginRule }
         }
-        .buttonStyle(.bordered)
-        .padding(NSPSpacing.medium)
-        .background(NSPColor.cardBackground)
+        .background(Color.white)
+        .onDisappear { Task { await saveMeetingTitle() } }
     }
+
+    /// The red vertical rule + timestamp gutter, matching the mockup —
+    /// drawn once behind every ruled line rather than per-row, so it reads
+    /// as one continuous margin the way real notebook paper does.
+    private var marginRule: some View {
+        Rectangle()
+            .fill(Color.red.opacity(0.55))
+            .frame(width: 1.5)
+            .padding(.leading, 60)
+            .allowsHitTesting(false)
+    }
+
+    // MARK: - Meeting title
+
+    private func loadMeetingTitle() async {
+        guard let meetingID = session.meetingID, let meeting = try? await environment.meetingRepository.find(meetingID)
+        else { return }
+        meetingTitle = meeting.title
+    }
+
+    private func saveMeetingTitle() async {
+        guard let meetingID = session.meetingID,
+            var meeting = try? await environment.meetingRepository.find(meetingID)
+        else { return }
+        let trimmed = meetingTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != meeting.title else { return }
+        meeting.title = trimmed
+        try? await environment.meetingRepository.update(meeting, at: environment.clock.now())
+    }
+
+    // MARK: - Typed lines
 
     private func addLine(after id: UUID) {
         guard let index = lines.firstIndex(where: { $0.id == id }) else { return }
@@ -160,10 +179,6 @@ struct PadRecordingCanvas: View {
         }
     }
 
-    private static func millisecondTimestamp(_ date: Date) -> Int64 {
-        Int64(date.timeIntervalSince1970 * 1000)
-    }
-
     /// Restores any lines already written this session — the canvas can
     /// reappear (tab away and back) without losing what's on the page.
     private func loadExistingLines() async {
@@ -189,39 +204,72 @@ struct PadRecordingCanvas: View {
         }
     }
 
+    private static func millisecondTimestamp(_ date: Date) -> Int64 {
+        Int64(date.timeIntervalSince1970 * 1000)
+    }
+
     private static func formatElapsed(_ seconds: TimeInterval) -> String {
         let totalSeconds = Int(seconds)
         return String(format: "%d:%02d", totalSeconds / 60, totalSeconds % 60)
     }
-}
 
-/// One ruled line's state: its text, the `NoteBlock` it's backed by (once
-/// it has one), and the margin label to display.
-struct PadNoteLine: Identifiable {
-    let id = UUID()
-    var text: String = ""
-    var block: NoteBlock?
-    var timestampLabel: String?
-}
+    // MARK: - Ink
 
-private struct PadNoteLineRow: View {
-    @Binding var line: PadNoteLine
-    var focusedLineID: FocusState<UUID?>.Binding
+    private static let inkFileName = "page.drawing"
+    private static let inkRelativePath = "ink/page.drawing"
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: NSPSpacing.medium) {
-            Text(line.timestampLabel ?? "")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(NSPColor.secondaryText)
-                .frame(width: 52, alignment: .trailing)
-
-            TextField("", text: $line.text)
-                .font(.body)
-                .focused(focusedLineID, equals: line.id)
+    private func handleDrawingChange(_ newDrawing: PKDrawing) {
+        drawing = newDrawing
+        inkSaveTask?.cancel()
+        inkSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            guard !Task.isCancelled else { return }
+            await saveInk(newDrawing)
         }
-        .padding(.vertical, 8)
-        .overlay(alignment: .bottom) {
-            Divider()
+    }
+
+    private func saveInk(_ drawing: PKDrawing) async {
+        guard let meetingID = session.meetingID, let selfPersonID = environment.selfPersonID else { return }
+        do {
+            let container = try environment.makeMeetingContainer(meetingID: meetingID)
+            let fileURL = container.inkDirectoryURL.appendingPathComponent(Self.inkFileName)
+            try drawing.dataRepresentation().write(to: fileURL, options: .atomic)
+
+            if let existing = inkBlock {
+                try await environment.noteBlockRepository.update(existing, at: environment.clock.now())
+            } else {
+                let sampleOffset = await session.currentSampleOffset() ?? 0
+                let now = environment.clock.now()
+                let content = BlockContent.assetReference(path: Self.inkRelativePath)
+                let block = NoteBlock(
+                    blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: selfPersonID, type: .sketch,
+                    content: content, creationRange: SampleRange(startSample: sampleOffset, endSample: sampleOffset),
+                    privacy: .shared,
+                    opLog: [
+                        Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: content)
+                    ]
+                )
+                try await environment.noteBlockRepository.insert(block, at: now)
+                inkBlock = block
+            }
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
+    private func loadExistingInk() async {
+        guard let meetingID = session.meetingID else { return }
+        do {
+            let blocks = try await environment.noteBlockRepository.fetchAll(meetingID: meetingID)
+            guard let block = blocks.first(where: { $0.type == .sketch }) else { return }
+            inkBlock = block
+            guard case .assetReference(let path) = block.content else { return }
+            let container = try environment.makeMeetingContainer(meetingID: meetingID)
+            let fileURL = container.rootURL.appendingPathComponent(path)
+            guard let data = try? Data(contentsOf: fileURL) else { return }
+            drawing = try PKDrawing(data: data)
+        } catch {
+            loadError = "\(error)"
         }
     }
 }
