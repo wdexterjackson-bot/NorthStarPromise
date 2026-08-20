@@ -29,6 +29,11 @@ public actor CaptureEngine {
     private var isCapturing = false
     private var isPaused = false
 
+    /// Immutable and internally thread-safe (`AudioLevelMeter`'s own
+    /// doc comment explains why), so it's exposed `nonisolated` — the UI
+    /// polls it directly rather than awaiting the actor every frame.
+    public nonisolated let levelMeter = AudioLevelMeter()
+
     public init(
         backend: some CaptureBackend, ringBufferCapacity: Int = 96000, preferredSampleRate: Double = 48000,
         makeSegmenter: @escaping @Sendable (SegmentAudioFormat) -> Segmenter
@@ -65,8 +70,9 @@ public actor CaptureEngine {
         try await segmenter.beginRecording()
 
         do {
-            try backend.startEngine(onBuffer: { [ringBuffer] samples in
+            try backend.startEngine(onBuffer: { [ringBuffer, levelMeter] samples in
                 ringBuffer.write(samples)
+                levelMeter.record(samples: samples)
             })
         } catch {
             throw CaptureEngineError.backendFailure("\(error)")

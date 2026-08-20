@@ -1,11 +1,11 @@
 import NSPDesignSystem
 import SwiftUI
 
-/// docs/07 §4's "Active session view": elapsed time, Marker/Pause/Stop,
-/// capture-device attribution, and a processing-mode chip. The
-/// "waveform-free level meter" and live provisional transcript from the
-/// same spec paragraph aren't wired to any data source yet — omitted
-/// rather than faked (docs/07 §11).
+/// docs/07 §4's "Active session view": elapsed time, a live input-level
+/// meter, Marker/Pause/Stop, and capture-device attribution. A live
+/// provisional transcript and processing-mode chip from the same spec
+/// paragraph aren't wired to any data source yet — omitted rather than
+/// faked (docs/07 §11).
 @MainActor
 struct ActiveSessionCard: View {
     let session: RecordingSession
@@ -34,6 +34,8 @@ struct ActiveSessionCard: View {
                     NSPStatusBadge(symbolName: "record.circle.fill", label: "Recording", tint: NSPColor.statusDanger)
                 }
             }
+
+            NSPLevelMeter(level: session.inputLevel)
 
             HStack(spacing: NSPSpacing.medium) {
                 Label("Recording on this iPhone", systemImage: "iphone")

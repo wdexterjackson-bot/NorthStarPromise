@@ -29,6 +29,12 @@ public final class RecordingSession {
     public private(set) var elapsedSeconds: TimeInterval = 0
     public private(set) var markerCount = 0
     public private(set) var meetingID: MeetingID?
+    /// 0...1, the "voice thermometer" docs/07 §4 calls a level meter.
+    /// Only meaningful while `.recording` — `0` otherwise, including while
+    /// `.paused` (the engine keeps the mic open across a pause, but
+    /// showing a live meter then would read as "still recording," which
+    /// isn't what `.paused` means).
+    public private(set) var inputLevel: Float = 0
 
     private let environment: AppEnvironment
     private var captureEngine: CaptureEngine?
@@ -83,6 +89,7 @@ public final class RecordingSession {
             try await captureEngine.pause()
             state = .paused
             stopElapsedTimer()
+            inputLevel = 0
         } catch {
             state = .failed(Self.describeFailure(error))
         }
@@ -139,12 +146,18 @@ public final class RecordingSession {
         }
     }
 
+    /// Also polls `captureEngine.levelMeter` for `inputLevel` — a 10fps
+    /// cadence keeps the level meter feeling live without polling faster
+    /// than a human eye needs (`AudioLevelMeter.currentLevel()` is a cheap
+    /// lock-protected read, but there's no reason to call it more often
+    /// than the UI repaints for it).
     private func startElapsedTimer(from startedAt: Date) {
         elapsedTimerTask?.cancel()
         elapsedTimerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 self?.elapsedSeconds = Date().timeIntervalSince(startedAt)
-                try? await Task.sleep(nanoseconds: 500_000_000)
+                self?.inputLevel = self?.captureEngine?.levelMeter.currentLevel() ?? 0
+                try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }
     }
@@ -160,6 +173,7 @@ public final class RecordingSession {
         markerCount = 0
         meetingID = nil
         captureEngine = nil
+        inputLevel = 0
     }
 
     private static func describeFailure(_ error: Error) -> String {
