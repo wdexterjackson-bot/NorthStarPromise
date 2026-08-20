@@ -51,6 +51,31 @@
             for meeting in samples {
                 try? await environment.meetingRepository.insert(meeting, at: meeting.createdAt)
             }
+
+            if let selfPersonID = environment.selfPersonID {
+                let productSyncID = samples[0].meetingID
+                let oneOnOneID = samples[1].meetingID
+                let actionSamples: [Action] = [
+                    Action(
+                        actionID: ActionID(rawValue: UUID()), meetingID: productSyncID,
+                        text: "Send updated roadmap slides to the team", owner: .explicit(selfPersonID),
+                        date: .explicit(now.addingTimeInterval(-3600 * 20)), status: .confirmed, evidence: [],
+                        createdBy: selfPersonID),
+                    Action(
+                        actionID: ActionID(rawValue: UUID()), meetingID: productSyncID,
+                        text: "Follow up with Legal on the contract redline", owner: .unresolved,
+                        date: .inferred(now.addingTimeInterval(3600 * 48)), status: .proposed, evidence: [],
+                        createdBy: selfPersonID),
+                    Action(
+                        actionID: ActionID(rawValue: UUID()), meetingID: oneOnOneID,
+                        text: "Draft Priya's Q3 goals doc", owner: .explicit(selfPersonID), date: .unresolved,
+                        status: .inProgress, evidence: [], createdBy: selfPersonID),
+                ]
+                for action in actionSamples {
+                    try? await environment.actionRepository.insert(action, at: now)
+                }
+            }
+
             UserDefaults.standard.set(true, forKey: hasSeededKey)
         }
     }
