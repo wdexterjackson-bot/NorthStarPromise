@@ -139,4 +139,19 @@ struct GRDBNoteBlockRepositoryTests {
 
         #expect(Set(all.map(\.blockID)) == Set([first.blockID, second.blockID]))
     }
+
+    @Test func test_delete_removesTheBlockAndItsOpLog() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let (meetingID, personID) = try await Self.makeMeetingGraph(appDatabase)
+        let repository = GRDBNoteBlockRepository(dbWriter: appDatabase.dbWriter)
+        let block = Self.makeBlock(
+            meetingID: meetingID, authorID: personID,
+            opLog: [Operation(authorID: personID, timestamp: 1, content: .text("first"))])
+        try await repository.insert(block, at: Date())
+
+        try await repository.delete(block.blockID)
+
+        let found = try await repository.find(block.blockID)
+        #expect(found == nil)
+    }
 }

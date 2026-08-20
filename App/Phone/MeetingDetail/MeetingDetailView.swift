@@ -4,11 +4,11 @@ import SwiftUI
 
 /// docs/07 §4's nine meeting-detail tabs. A horizontal tab strip rather
 /// than a native `TabView` — nine destinations don't fit a bottom tab bar
-/// legibly. Overview is functional against real data; every other tab
-/// renders the correct "nothing here yet" state (docs/07 §11) rather than
-/// fabricated content, since transcription, summarization, actions,
-/// attachments, sharing, and the processing log aren't wired to any
-/// pipeline in this pass.
+/// legibly. Overview, Notes, and Audio are functional against real data;
+/// every other tab renders the correct "nothing here yet" state
+/// (docs/07 §11) rather than fabricated content, since transcription,
+/// summarization, actions, attachments, sharing, and the processing log
+/// aren't wired to any pipeline in this pass.
 @MainActor
 struct MeetingDetailView: View {
     enum Tab: String, CaseIterable, Identifiable {
@@ -80,17 +80,13 @@ struct MeetingDetailView: View {
             case .overview:
                 OverviewTab(meeting: meeting)
             case .notes:
-                EmptyTabPlaceholder(
-                    title: "No notes yet", systemImage: "note.text",
-                    message: "Notes taken during this meeting appear here.")
+                NotesTab(meeting: meeting, environment: environment)
             case .transcript:
                 EmptyTabPlaceholder(
                     title: "No transcript yet", systemImage: "text.bubble",
                     message: "Transcription runs after processing completes.")
             case .audio:
-                EmptyTabPlaceholder(
-                    title: "Playback isn't wired up yet", systemImage: "waveform",
-                    message: "An audio player is a follow-up piece of work.")
+                AudioTab(meeting: meeting, environment: environment)
             case .actions:
                 EmptyTabPlaceholder(
                     title: "No actions yet", systemImage: "checkmark.circle",

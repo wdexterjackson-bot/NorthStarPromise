@@ -1,23 +1,54 @@
 import NSPCore
+import NSPDesignSystem
 import SwiftUI
 
 /// docs/07 §4's Library screen: search, filter, sort, saved searches, and
-/// paged rows that never load transcripts. Filter chips and saved searches
-/// aren't built yet — search-by-title and newest-first sort are the v1
-/// slice; the rest is a follow-up, not a silent scope cut (documented
-/// here rather than left to be discovered).
+/// paged rows that never load transcripts. Filter chips cover lifecycle
+/// state (the most useful axis given nothing generates actions or owners
+/// yet); date/workspace/`captureMode`/has-actions/has-unresolved-owner/
+/// `excludedFromMemory` chips and saved searches are a follow-up, not a
+/// silent scope cut (documented here rather than left to be discovered).
 @MainActor
 struct LibraryView: View {
     let environment: AppEnvironment
 
+    /// A coarse grouping of `MeetingState` — the full 19-case vocabulary
+    /// isn't a useful filter surface, but "what stage is this meeting at"
+    /// is.
+    private enum StateFilter: String, CaseIterable, Identifiable {
+        case needsReview = "Needs review"
+        case inProgress = "Recording/Processing"
+        case approved = "Approved"
+        case archived = "Archived"
+
+        var id: String { rawValue }
+
+        func matches(_ state: MeetingState) -> Bool {
+            switch self {
+            case .needsReview: return state == .readyForReview || state == .partialFailure
+            case .inProgress:
+                return [.arming, .recording, .paused, .interrupted, .finalizing, .processing]
+                    .contains(state)
+            case .approved: return state == .approved || state == .edited || state == .shared || state == .savedRaw
+            case .archived: return state == .archived
+            }
+        }
+    }
+
     @State private var meetings: [Meeting] = []
     @State private var searchText = ""
+    @State private var activeFilters: Set<StateFilter> = []
     @State private var loadError: String?
 
     private var filteredMeetings: [Meeting] {
-        let sorted = meetings.sorted { $0.startedAt > $1.startedAt }
-        guard !searchText.isEmpty else { return sorted }
-        return sorted.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        var result = meetings.sorted { $0.startedAt > $1.startedAt }
+        if !searchText.isEmpty {
+            result = result.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+        }
+        if !activeFilters.isEmpty {
+            result = result.filter { meeting in activeFilters.contains { $0.matches(meeting.lifecycleState) } }
+        }
+        return result
     }
 
     var body: some View {
@@ -31,11 +62,18 @@ struct LibraryView: View {
                         "No meetings yet", systemImage: "list.bullet",
                         description: Text("Recordings you start from Today will show up here."))
                 } else if filteredMeetings.isEmpty {
-                    ContentUnavailableView.search(text: searchText)
+                    emptyFilteredState
                 } else {
-                    List(filteredMeetings) { meeting in
-                        NavigationLink(value: meeting.meetingID) {
-                            MeetingRow(meeting: meeting)
+                    List {
+                        Section {
+                            filterChips
+                                .listRowInsets(EdgeInsets())
+                                .listRowSeparator(.hidden)
+                        }
+                        ForEach(filteredMeetings) { meeting in
+                            NavigationLink(value: meeting.meetingID) {
+                                MeetingRow(meeting: meeting)
+                            }
                         }
                     }
                 }
@@ -47,6 +85,49 @@ struct LibraryView: View {
             .searchable(text: $searchText, prompt: "Search meetings")
             .task { await loadMeetings() }
             .refreshable { await loadMeetings() }
+        }
+    }
+
+    @ViewBuilder
+    private var emptyFilteredState: some View {
+        if !searchText.isEmpty {
+            ContentUnavailableView.search(text: searchText)
+        } else {
+            ContentUnavailableView {
+                Label("No meetings match these filters", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("Clear filters to see every meeting.")
+            } actions: {
+                Button("Clear filters") { activeFilters.removeAll() }
+            }
+        }
+    }
+
+    private var filterChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: NSPSpacing.small) {
+                ForEach(StateFilter.allCases) { filter in
+                    let isSelected = activeFilters.contains(filter)
+                    Button {
+                        if isSelected {
+                            activeFilters.remove(filter)
+                        } else {
+                            activeFilters.insert(filter)
+                        }
+                    } label: {
+                        Text(filter.rawValue)
+                            .font(.caption.weight(.medium))
+                            .padding(.horizontal, NSPSpacing.medium)
+                            .padding(.vertical, NSPSpacing.small)
+                            .background(isSelected ? NSPColor.accent.opacity(0.2) : NSPColor.secondaryBackground)
+                            .foregroundStyle(isSelected ? NSPColor.accent : NSPColor.primaryText)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+                }
+            }
+            .padding(.vertical, NSPSpacing.extraSmall)
         }
     }
 

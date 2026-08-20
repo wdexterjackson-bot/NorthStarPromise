@@ -9,6 +9,7 @@ public protocol NoteBlockRepository: Sendable {
     func update(_ block: NoteBlock, at date: Date) async throws
     func find(_ id: NoteBlockID) async throws -> NoteBlock?
     func fetchAll(meetingID: MeetingID) async throws -> [NoteBlock]
+    func delete(_ id: NoteBlockID) async throws
 }
 
 public struct GRDBNoteBlockRepository: NoteBlockRepository {
@@ -53,6 +54,15 @@ public struct GRDBNoteBlockRepository: NoteBlockRepository {
                 .filter(Column("meeting_id") == meetingID.rawValue.uuidString)
                 .fetchAll(db)
             return try rows.map { row in try row.asDomain(opLog: try Self.fetchOpLog(blockID: row.blockID, in: db)) }
+        }
+    }
+
+    /// `note_operation` rows cascade on delete (the migration's
+    /// `references("note_block", onDelete: .cascade)`), so no separate
+    /// opLog cleanup is needed here.
+    public func delete(_ id: NoteBlockID) async throws {
+        try await dbWriter.write { db in
+            _ = try NoteBlockRow.deleteOne(db, key: id.rawValue.uuidString)
         }
     }
 

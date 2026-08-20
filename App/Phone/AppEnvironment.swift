@@ -23,6 +23,7 @@ public final class AppEnvironment {
     public let noteBlockRepository: any NoteBlockRepository
     public let policyRepository: any PolicyRepository
     public let workspaceRepository: any WorkspaceRepository
+    public let personRepository: any PersonRepository
 
     public let containerRootURL: URL
     public let deviceID: DeviceID
@@ -35,8 +36,15 @@ public final class AppEnvironment {
     /// completes; screens that need it show a brief loading state.
     public private(set) var defaultPolicy: Policy?
 
+    /// The one local `Person` this build treats as "you" — every `NoteBlock`
+    /// the user authors from this device attributes to it. Multi-person
+    /// identity (voice-enrolled speakers, invited collaborators) isn't built
+    /// yet. `nil` until `bootstrap()` completes, same as `defaultPolicy`.
+    public private(set) var selfPersonID: PersonID?
+
     private static let defaultPolicyIDKey = "com.dexterjackson.northstarpromise.defaultPolicyID"
     private static let defaultWorkspaceIDKey = "com.dexterjackson.northstarpromise.defaultWorkspaceID"
+    private static let selfPersonIDKey = "com.dexterjackson.northstarpromise.selfPersonID"
 
     public init() throws {
         let appSupportURL = try FileManager.default.url(
@@ -51,6 +59,7 @@ public final class AppEnvironment {
         self.noteBlockRepository = GRDBNoteBlockRepository(dbWriter: appDatabase.dbWriter)
         self.policyRepository = GRDBPolicyRepository(dbWriter: appDatabase.dbWriter)
         self.workspaceRepository = GRDBWorkspaceRepository(dbWriter: appDatabase.dbWriter)
+        self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
         self.containerRootURL = appSupportURL
         self.deviceID = Self.loadOrCreateDeviceID()
         self.clock = SystemClock()
@@ -64,8 +73,19 @@ public final class AppEnvironment {
 
         let defaults = UserDefaults.standard
         let storedPolicyID = defaults.string(forKey: Self.defaultPolicyIDKey).flatMap { UUID(uuidString: $0) }
-        if let storedPolicyID, let existing = try await policyRepository.find(PolicyID(rawValue: storedPolicyID)) {
-            defaultPolicy = existing
+        let storedPersonID = defaults.string(forKey: Self.selfPersonIDKey).flatMap { UUID(uuidString: $0) }
+
+        var existingPolicy: Policy?
+        var existingPerson: Person?
+        if let storedPolicyID {
+            existingPolicy = try await policyRepository.find(PolicyID(rawValue: storedPolicyID))
+        }
+        if let storedPersonID {
+            existingPerson = try await personRepository.find(PersonID(rawValue: storedPersonID))
+        }
+        if let existingPolicy, let existingPerson {
+            defaultPolicy = existingPolicy
+            selfPersonID = existingPerson.personID
             return
         }
 
@@ -76,9 +96,14 @@ public final class AppEnvironment {
             policyID: PolicyID(rawValue: UUID()), workspaceID: workspace.workspaceID, defaultProcessingMode: .localOnly)
         try await policyRepository.insert(policy, at: clock.now())
 
+        let person = Person(personID: PersonID(rawValue: UUID()), workspaceID: workspace.workspaceID, name: "You")
+        try await personRepository.insert(person, at: clock.now())
+
         defaults.set(policy.policyID.rawValue.uuidString, forKey: Self.defaultPolicyIDKey)
         defaults.set(workspace.workspaceID.rawValue.uuidString, forKey: Self.defaultWorkspaceIDKey)
+        defaults.set(person.personID.rawValue.uuidString, forKey: Self.selfPersonIDKey)
         defaultPolicy = policy
+        selfPersonID = person.personID
     }
 
     /// Builds a fresh `MeetingContainer` and its on-disk directory

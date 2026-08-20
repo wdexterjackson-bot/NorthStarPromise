@@ -1,0 +1,69 @@
+import Foundation
+@preconcurrency import GRDB
+import NSPCore
+
+/// Mirrors the `person` table (docs/02 §5). `Person.aliases` lives in the
+/// sibling `person_alias` table — same "row owns its own columns,
+/// repository owns the join" split `NoteBlockRow`/`opLog` uses.
+struct PersonRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "person"
+
+    var personID: String
+    var workspaceID: String
+    var name: String
+    var voiceEnrollmentRef: String?
+    var contactLink: String?
+    var createdAt: Date
+    var updatedAt: Date
+    var rowRevision: Int
+
+    enum CodingKeys: String, CodingKey {
+        case personID = "person_id"
+        case workspaceID = "workspace_id"
+        case name
+        case voiceEnrollmentRef = "voice_enrollment_ref"
+        case contactLink = "contact_link"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case rowRevision = "row_revision"
+    }
+
+    init(person: Person, createdAt: Date, updatedAt: Date, rowRevision: Int) {
+        self.personID = person.personID.rawValue.uuidString
+        self.workspaceID = person.workspaceID.rawValue.uuidString
+        self.name = person.name
+        self.voiceEnrollmentRef = person.voiceEnrollmentRef
+        self.contactLink = person.contactLink
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.rowRevision = rowRevision
+    }
+
+    func asDomain(aliases: [String]) throws -> Person {
+        guard let personUUID = UUID(uuidString: personID) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "person_id", value: personID)
+        }
+        guard let workspaceUUID = UUID(uuidString: workspaceID) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "workspace_id", value: workspaceID)
+        }
+        return Person(
+            personID: PersonID(rawValue: personUUID), workspaceID: WorkspaceID(rawValue: workspaceUUID), name: name,
+            aliases: aliases, voiceEnrollmentRef: voiceEnrollmentRef, contactLink: contactLink)
+    }
+}
+
+/// Mirrors the `person_alias` table — one row per `Person.aliases` entry,
+/// ordered by `position`.
+struct PersonAliasRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "person_alias"
+
+    var personID: String
+    var position: Int
+    var alias: String
+
+    enum CodingKeys: String, CodingKey {
+        case personID = "person_id"
+        case position
+        case alias
+    }
+}
