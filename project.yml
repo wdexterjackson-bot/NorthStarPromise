@@ -59,6 +59,11 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        NSMicrophoneUsageDescription: >-
+          North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it.
+        NSCalendarsWriteOnlyAccessUsageDescription: >-
+          North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in
+          Settings.
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"

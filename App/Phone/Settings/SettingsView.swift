@@ -1,3 +1,4 @@
+import NSPActions
 import NSPDesignSystem
 import SwiftUI
 
@@ -9,6 +10,10 @@ import SwiftUI
 @MainActor
 struct SettingsView: View {
     let environment: AppEnvironment
+
+    @State private var calendars: [CalendarInfo] = []
+    @State private var isLoadingCalendars = false
+    @State private var calendarAccessDenied = false
 
     var body: some View {
         NavigationStack {
@@ -22,6 +27,8 @@ struct SettingsView: View {
                         Text("Not checked yet").foregroundStyle(NSPColor.secondaryText)
                     }
                 }
+
+                calendarSection
 
                 unconfiguredSection(
                     title: "Capture", symbol: "mic.fill", tint: .red,
@@ -52,6 +59,88 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+        }
+    }
+
+    /// "Create a calendar event for recordings." Turning this on requests
+    /// EventKit write-only access (never reads existing events) and, once
+    /// granted, lets the user pick a destination calendar. Every event is
+    /// still confirmed individually before creation — this toggle governs
+    /// whether the confirmation prompt appears after a recording, not
+    /// whether the write itself is silent (I6).
+    private var calendarSection: some View {
+        Section("Calendar") {
+            Toggle(
+                "Create calendar event for recordings",
+                isOn: Binding(
+                    get: { environment.calendarSyncEnabled },
+                    set: { newValue in Task { await setCalendarSyncEnabled(newValue) } }))
+
+            if environment.calendarSyncEnabled {
+                if isLoadingCalendars {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                } else if calendars.isEmpty {
+                    Text("No writable calendars found.")
+                        .font(.caption)
+                        .foregroundStyle(NSPColor.secondaryText)
+                } else {
+                    Picker(
+                        "Calendar",
+                        selection: Binding(
+                            get: { environment.selectedCalendarIdentifier ?? calendars[0].identifier },
+                            set: { environment.selectedCalendarIdentifier = $0 })
+                    ) {
+                        ForEach(calendars) { calendar in
+                            Text(calendar.title).tag(calendar.identifier)
+                        }
+                    }
+                }
+            }
+
+            if calendarAccessDenied {
+                Text("Calendar access was denied. Enable it for North-Star Promise in Settings → Privacy & Security.")
+                    .font(.caption)
+                    .foregroundStyle(NSPColor.statusDanger)
+            }
+
+            Text(
+                "Adds an event to your chosen calendar after each recording ends. You always confirm the exact "
+                    + "time before it's created."
+            )
+            .font(.caption)
+            .foregroundStyle(NSPColor.secondaryText)
+        }
+        .task {
+            if environment.calendarSyncEnabled { await loadCalendars() }
+        }
+    }
+
+    private func setCalendarSyncEnabled(_ enabled: Bool) async {
+        guard enabled else {
+            environment.calendarSyncEnabled = false
+            return
+        }
+        let status = await environment.calendarEventWriter.requestAccess()
+        if status == .authorized {
+            calendarAccessDenied = false
+            environment.calendarSyncEnabled = true
+            await loadCalendars()
+        } else {
+            calendarAccessDenied = true
+            environment.calendarSyncEnabled = false
+        }
+    }
+
+    private func loadCalendars() async {
+        isLoadingCalendars = true
+        defer { isLoadingCalendars = false }
+        calendars = await environment.calendarEventWriter.availableCalendars()
+        if environment.selectedCalendarIdentifier == nil {
+            environment.selectedCalendarIdentifier = calendars.first?.identifier
         }
     }
 

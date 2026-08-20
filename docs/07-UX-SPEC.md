@@ -180,9 +180,19 @@ with owner and due-date columns that mark inferred values. Bulk confirm is allow
 exempt from the per-payload confirmation gate (I6).
 
 **Settings.** Capture (format, segment length where exposed, markers, haptics), Processing (default
-`ProcessingMode`, on-device availability status), Privacy (consent defaults, announcement text, retention,
-redaction defaults, memory exclusion), Storage (per-device usage, reclamation policy), Sync (iCloud account
-state, quota, last change token time), Integrations, Accessibility, Diagnostics (content-free by default).
+`ProcessingMode`, on-device availability status), Calendar (an opt-in toggle to create a calendar event after
+each recording, plus the destination calendar — off by default; see "Calendar events for recordings" below),
+Privacy (consent defaults, announcement text, retention, redaction defaults, memory exclusion), Storage
+(per-device usage, reclamation policy), Sync (iCloud account state, quota, last change token time),
+Integrations, Accessibility, Diagnostics (content-free by default).
+
+**Calendar events for recordings.** With the Settings toggle on, stopping a recording offers to add a calendar
+event to the user's chosen calendar — the event's exact title, start, and end are shown and the user must
+explicitly confirm before anything is created (I6; EventKit access itself is write-only, so the app never reads
+the user's existing calendar). The event title is the meeting's title as recorded. Start time defaults to the
+15-minute increment *before* the recording actually started (a 2:11pm start defaults to 2:00pm) and is the one
+field the user can adjust; end time is the recording's actual end and isn't user-editable at this step. The
+created event's identifier is stored on the meeting (`Meeting.calendarEventID`).
 
 ---
 

@@ -83,6 +83,18 @@ struct TodayView: View {
             .task { await load() }
             .refreshable { await load() }
         }
+        .sheet(
+            item: Binding(
+                get: { session.pendingCalendarMeeting },
+                set: { newValue in if newValue == nil { session.dismissCalendarPrompt() } })
+        ) { meeting in
+            CalendarEventConfirmationView(
+                meeting: meeting, environment: environment,
+                onDone: {
+                    session.dismissCalendarPrompt()
+                    Task { await load() }
+                })
+        }
     }
 
     private var statsStrip: some View {

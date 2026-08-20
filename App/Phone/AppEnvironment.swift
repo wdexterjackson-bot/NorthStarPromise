@@ -1,4 +1,5 @@
 import Foundation
+import NSPActions
 import NSPCore
 import NSPMedia
 import NSPPersistence
@@ -25,10 +26,25 @@ public final class AppEnvironment {
     public let workspaceRepository: any WorkspaceRepository
     public let personRepository: any PersonRepository
     public let actionRepository: any ActionRepository
+    public let calendarEventWriter: any CalendarEventWriter
 
     public let containerRootURL: URL
     public let deviceID: DeviceID
     public let clock: any Clock
+
+    /// "Create a calendar event for recordings" (Settings § Calendar).
+    /// Off by default — this only ever runs after the user opts in, and
+    /// each event still gets a human confirmation before it's created
+    /// (I6; see `CalendarEventConfirmationView`).
+    public var calendarSyncEnabled: Bool {
+        didSet { UserDefaults.standard.set(calendarSyncEnabled, forKey: Self.calendarSyncEnabledKey) }
+    }
+    /// Which calendar new events go into. `nil` until the user picks one
+    /// (Settings fetches `calendarEventWriter.availableCalendars()` and
+    /// defaults to the first once access is granted).
+    public var selectedCalendarIdentifier: String? {
+        didSet { UserDefaults.standard.set(selectedCalendarIdentifier, forKey: Self.selectedCalendarIdentifierKey) }
+    }
 
     /// The one local workspace/policy this build creates on first launch
     /// (docs/06 §1.1's safest default: `.localOnly`). Multi-workspace
@@ -46,6 +62,8 @@ public final class AppEnvironment {
     private static let defaultPolicyIDKey = "com.dexterjackson.northstarpromise.defaultPolicyID"
     private static let defaultWorkspaceIDKey = "com.dexterjackson.northstarpromise.defaultWorkspaceID"
     private static let selfPersonIDKey = "com.dexterjackson.northstarpromise.selfPersonID"
+    private static let calendarSyncEnabledKey = "com.dexterjackson.northstarpromise.calendarSyncEnabled"
+    private static let selectedCalendarIdentifierKey = "com.dexterjackson.northstarpromise.selectedCalendarIdentifier"
 
     public init() throws {
         let appSupportURL = try FileManager.default.url(
@@ -62,9 +80,12 @@ public final class AppEnvironment {
         self.workspaceRepository = GRDBWorkspaceRepository(dbWriter: appDatabase.dbWriter)
         self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
         self.actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+        self.calendarEventWriter = EventKitCalendarEventWriter()
         self.containerRootURL = appSupportURL
         self.deviceID = Self.loadOrCreateDeviceID()
         self.clock = SystemClock()
+        self.calendarSyncEnabled = UserDefaults.standard.bool(forKey: Self.calendarSyncEnabledKey)
+        self.selectedCalendarIdentifier = UserDefaults.standard.string(forKey: Self.selectedCalendarIdentifierKey)
     }
 
     /// Ensures `defaultPolicy` is set, creating the one local workspace and

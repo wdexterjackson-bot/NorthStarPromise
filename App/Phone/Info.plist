@@ -18,6 +18,10 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in Settings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

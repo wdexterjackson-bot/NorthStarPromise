@@ -42,6 +42,12 @@ public final class RecordingSession {
     public private(set) var markers: [SessionMarker] = []
     public var markerCount: Int { markers.count }
     public private(set) var meetingID: MeetingID?
+    /// Set right after a successful `stop()` when calendar sync is on and
+    /// a destination calendar is chosen — `TodayView` shows
+    /// `CalendarEventConfirmationView` while this is non-nil. Never set
+    /// (and so never prompted) otherwise, since the whole point of the
+    /// Settings toggle is that this is opt-in.
+    public private(set) var pendingCalendarMeeting: Meeting?
     /// 0...1, the "voice thermometer" docs/07 §4 calls a level meter.
     /// Only meaningful while `.recording` — `0` otherwise, including while
     /// `.paused` (the engine keeps the mic open across a pause, but
@@ -205,11 +211,21 @@ public final class RecordingSession {
                     sampleRate: manifest.audioFormat.sampleRate)
                 meeting.endedAt = environment.clock.now()
                 try await environment.meetingRepository.update(meeting, at: environment.clock.now())
+                if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
+                    pendingCalendarMeeting = meeting
+                }
             }
             reset()
         } catch {
             state = .failed(Self.describeFailure(error))
         }
+    }
+
+    /// Dismisses the post-recording calendar prompt — "Skip," or after a
+    /// successful "Add," either way the meeting is already saved and this
+    /// is purely about closing the sheet.
+    public func dismissCalendarPrompt() {
+        pendingCalendarMeeting = nil
     }
 
     /// Also polls `captureEngine.levelMeter` for `inputLevel` — a 10fps
