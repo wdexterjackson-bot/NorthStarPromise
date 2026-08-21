@@ -3,6 +3,7 @@ import NSPCore
 import NSPPersistence
 import NSPPolicy
 import Speech
+import os.log
 
 public enum TranscriberError: Error {
     /// No backend exists yet (`Backend/` isn't built) — `transcribeRemote`/
@@ -10,6 +11,26 @@ public enum TranscriberError: Error {
     case unimplemented
     case authorizationDenied
 }
+
+/// Every reason a single segment can come back with zero turns — kept
+/// distinct rather than collapsed into a bare `nil`, so "the recognizer
+/// itself is unusable on this device" (an environment problem, most
+/// commonly the on-device speech model not being downloaded — very common
+/// on Simulator, per `transcribeSegment`'s own doc comment) is
+/// distinguishable from "recognition ran and genuinely found nothing to
+/// say" (a normal, unremarkable outcome). Both still degrade the same way
+/// today (§the meeting still saves, `.partialFailure` if every segment
+/// comes back empty) — this only changes what gets logged, so the next
+/// time this happens it's a five-second `log show` lookup instead of a
+/// multi-step audio-signal investigation.
+enum SegmentTranscriptionOutcome {
+    case turn(TranscriptTurn, confidence: Double)
+    case recognizerUnavailable
+    case recognitionError(String)
+    case noSpeechDetected
+}
+
+private let logger = Logger(subsystem: "com.dexterjackson.northstarpromise", category: "LiveTranscriber")
 
 /// The real on-device transcriber (docs/04 §2's `SpeechAnalyzerTranscriber`
 /// tier, implemented against `SFSpeechRecognizer` rather than the newer
@@ -53,17 +74,34 @@ public struct LiveTranscriber: TranscriberProtocol {
 
         var turns: [TranscriptTurn] = []
         var confidences: [Double] = []
+        var outcomeCounts: [String: Int] = [:]
         for ref in request.segments {
             guard let segment = try await segmentRepository.find(ref.segmentID), let url = segment.localURL else {
+                logger.warning("Segment \(ref.segmentID.description, privacy: .public) has no local file — skipped")
                 continue
             }
-            guard
-                let (turn, confidence) = try await Self.transcribeSegment(
-                    fileAt: url, meetingID: request.meetingID, segmentID: segment.segmentID,
-                    baseSampleOffset: segment.startSample, sampleRate: segment.sampleRate)
-            else { continue }
-            turns.append(turn)
-            confidences.append(confidence)
+            let outcome = await Self.transcribeSegment(
+                fileAt: url, meetingID: request.meetingID, segmentID: segment.segmentID,
+                baseSampleOffset: segment.startSample, sampleRate: segment.sampleRate)
+            switch outcome {
+            case .turn(let turn, let confidence):
+                turns.append(turn)
+                confidences.append(confidence)
+                outcomeCounts["turn", default: 0] += 1
+            case .recognizerUnavailable:
+                outcomeCounts["recognizerUnavailable", default: 0] += 1
+            case .recognitionError(let description):
+                let segmentDescription = ref.segmentID.description
+                logger.error("Segment \(segmentDescription, privacy: .public) failed: \(description, privacy: .public)")
+                outcomeCounts["recognitionError", default: 0] += 1
+            case .noSpeechDetected:
+                outcomeCounts["noSpeechDetected", default: 0] += 1
+            }
+        }
+        if turns.isEmpty, !request.segments.isEmpty {
+            let segmentCount = request.segments.count
+            let summary = String(describing: outcomeCounts)
+            logger.error("zero turns, \(segmentCount, privacy: .public) segment(s): \(summary, privacy: .public)")
         }
 
         let meanConfidence = confidences.isEmpty ? 0 : confidences.reduce(0, +) / Double(confidences.count)
@@ -99,8 +137,15 @@ public struct LiveTranscriber: TranscriberProtocol {
     /// never wall-clock math (docs/03's timeline rule).
     private static func transcribeSegment(
         fileAt url: URL, meetingID: MeetingID, segmentID: SegmentID, baseSampleOffset: Int64, sampleRate: Int
-    ) async throws -> (TranscriptTurn, Double)? {
-        guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else { return nil }
+    ) async -> SegmentTranscriptionOutcome {
+        guard let recognizer = SFSpeechRecognizer() else {
+            logger.error("SFSpeechRecognizer() returned nil — no recognizer for the current locale")
+            return .recognizerUnavailable
+        }
+        guard recognizer.isAvailable else {
+            logger.error("SFSpeechRecognizer.isAvailable == false — recognition service isn't reachable right now")
+            return .recognizerUnavailable
+        }
 
         let request = SFSpeechURLRecognitionRequest(url: url)
         request.shouldReportPartialResults = false
@@ -108,24 +153,41 @@ public struct LiveTranscriber: TranscriberProtocol {
             request.requiresOnDeviceRecognition = true
         }
 
-        let recognizedSegments: [RecognizedSegment] = try await withCheckedThrowingContinuation { continuation in
-            let hasResumed = Lock(false)
-            recognizer.recognitionTask(with: request) { result, error in
-                guard !hasResumed.exchange(true) else { return }
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    // Extract plain, Sendable data here — `SFTranscriptionSegment`
-                    // itself isn't Sendable and can't cross the continuation boundary.
-                    let extracted =
-                        result?.bestTranscription.segments.map {
-                            RecognizedSegment(
-                                text: $0.substring, timestamp: $0.timestamp, duration: $0.duration,
-                                confidence: Double($0.confidence))
-                        } ?? []
-                    continuation.resume(returning: extracted)
+        // A `recognitionTask` failure (most commonly `kLSRErrorDomain` code
+        // 300, "failed to initialize recognizer" — the on-device speech
+        // model isn't downloaded yet, a real and fairly common transient
+        // state on both Simulator and a freshly set-up device) is per-
+        // segment flakiness, not evidence the whole meeting is corrupt.
+        // Treating it as "this segment had no usable speech" (same as
+        // `result == nil`) rather than rethrowing means one segment's
+        // recognizer hiccup degrades gracefully instead of failing
+        // processing for the entire meeting — but the underlying reason is
+        // still logged (`SegmentTranscriptionOutcome`'s own doc comment)
+        // rather than discarded, so a run of these isn't a silent mystery.
+        let recognizedSegments: [RecognizedSegment]
+        do {
+            recognizedSegments = try await withCheckedThrowingContinuation { continuation in
+                let hasResumed = Lock(false)
+                recognizer.recognitionTask(with: request) { result, error in
+                    guard !hasResumed.exchange(true) else { return }
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        // Extract plain, Sendable data here — `SFTranscriptionSegment`
+                        // itself isn't Sendable and can't cross the continuation boundary.
+                        let extracted =
+                            result?.bestTranscription.segments.map {
+                                RecognizedSegment(
+                                    text: $0.substring, timestamp: $0.timestamp, duration: $0.duration,
+                                    confidence: Double($0.confidence))
+                            } ?? []
+                        continuation.resume(returning: extracted)
+                    }
                 }
             }
+        } catch {
+            let nsError = error as NSError
+            return .recognitionError("\(nsError.domain) code \(nsError.code): \(nsError.localizedDescription)")
         }
 
         let tokens = recognizedSegments.map { segment -> Token in
@@ -133,13 +195,13 @@ public struct LiveTranscriber: TranscriberProtocol {
             let end = start + Int64((segment.duration * Double(sampleRate)).rounded())
             return Token(text: segment.text, startSample: start, endSample: end, confidence: segment.confidence)
         }
-        guard !tokens.isEmpty else { return nil }
+        guard !tokens.isEmpty else { return .noSpeechDetected }
 
         let turn = TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: UUID()), meetingID: meetingID, revision: 1, isProvisional: false,
+            turnID: TranscriptTurnID(rawValue: UUID()), owner: .meeting(meetingID), revision: 1, isProvisional: false,
             tokens: tokens, segmentRefs: [segmentID])
         let meanConfidence = tokens.map(\.confidence).reduce(0, +) / Double(tokens.count)
-        return (turn, meanConfidence)
+        return .turn(turn, confidence: meanConfidence)
     }
 }
 

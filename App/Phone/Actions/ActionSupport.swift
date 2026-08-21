@@ -31,12 +31,12 @@ extension ActionStatus {
 
     var tint: Color {
         switch self {
-        case .proposed: return NSPColor.statusNeutral
-        case .confirmed: return NSPColor.statusInProgress
-        case .sent: return NSPColor.statusInProgress
-        case .inProgress: return NSPColor.statusWarning
-        case .done: return NSPColor.statusSuccess
-        case .dismissed: return NSPColor.statusNeutral
+        case .proposed: return Palette.textSecondary
+        case .confirmed: return Palette.accent.foreground
+        case .sent: return Palette.accent.foreground
+        case .inProgress: return Palette.warn.foreground
+        case .done: return Palette.success.foreground
+        case .dismissed: return Palette.textSecondary
         }
     }
 }
@@ -133,7 +133,7 @@ struct ActionTransitionMenu: View {
                 }
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .foregroundStyle(Palette.textTertiary)
             }
         }
     }

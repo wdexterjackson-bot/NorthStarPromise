@@ -34,8 +34,9 @@ struct PadNoteLineRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: NSPSpacing.medium) {
             Text(line.timestampLabel ?? "--:--")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(NSPColor.secondaryText)
+                .font(Typo.ui(11.5, .medium))
+                .monospacedDigit()
+                .foregroundStyle(Palette.textTertiary)
                 .frame(width: Self.timestampGutterWidth, alignment: .trailing)
 
             // `axis: .vertical` wraps long notes onto additional visual
@@ -43,7 +44,7 @@ struct PadNoteLineRow: View {
             // still submits (`.onSubmit` in `PadRecordingCanvas` moves to
             // the next ruled line), it doesn't insert a line break here.
             TextField("", text: $line.text, axis: .vertical)
-                .font(.body)
+                .font(Typo.ui(14, .medium))
                 .focused(focusedLineID, equals: line.id)
         }
         .frame(minHeight: Self.rowHeight, alignment: .bottom)

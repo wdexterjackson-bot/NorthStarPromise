@@ -95,6 +95,36 @@ struct ExhaustiveSwitchContentTests {
         }
     }
 
+    @Test func test_scheduledRecordingStatus_allCasesSwitchExhaustively() {
+        for status in ScheduledRecordingStatus.allCases {
+            switch status {
+            case .pending, .notified, .started, .completed, .skipped, .missed, .cancelled:
+                continue
+            }
+        }
+    }
+
+    @Test func test_scheduledRecordingAlertStyle_allCasesSwitchExhaustively() {
+        for style in ScheduledRecordingAlertStyle.allCases {
+            switch style {
+            case .sound, .vibrateOnly, .silent:
+                continue
+            }
+        }
+    }
+
+    @Test func test_scheduledRecordingDecision_allCasesSwitchExhaustively() {
+        let cases: [ScheduledRecordingDecision] = [
+            .notYetDue, .shouldNotify, .shouldAutoStop, .shouldMarkMissed, .terminal,
+        ]
+        for value in cases {
+            switch value {
+            case .notYetDue, .shouldNotify, .shouldAutoStop, .shouldMarkMissed, .terminal:
+                continue
+            }
+        }
+    }
+
     @Test func test_resolvedValue_allCasesSwitchExhaustively() {
         let cases: [ResolvedValue<String>] = [.explicit("x"), .inferred("x"), .unresolved]
         for value in cases {

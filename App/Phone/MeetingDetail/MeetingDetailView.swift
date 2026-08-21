@@ -41,9 +41,19 @@ struct MeetingDetailView: View {
 
     let meetingID: MeetingID
     let environment: AppEnvironment
+    /// Set when arriving from an Ask citation tap (`AskView`'s doc
+    /// comment) — jumps straight to the Transcript tab and seeks/scrolls
+    /// to this turn once it loads, instead of the usual `.overview` start.
+    private let initialSeekTurnID: TranscriptTurnID?
+
+    /// No-op unless this view is actually pushed onto a `NavigationStack`
+    /// or presented as a sheet. On iPad's `NavigationSplitView` detail
+    /// column (where this view is neither) it has no effect — `PadRootView`
+    /// independently clears `selectedMeetingID` for that case instead.
+    @Environment(\.dismiss) private var dismiss
 
     @State private var meeting: Meeting?
-    @State private var selectedTab: Tab = .overview
+    @State private var selectedTab: Tab
     @State private var loadError: String?
     /// Shared across the Audio/Transcript/Insights tabs so switching tabs
     /// mid-playback doesn't stop it, and every tab seeks the same absolute
@@ -51,6 +61,16 @@ struct MeetingDetailView: View {
     @State private var playback = AudioPlaybackController()
     @State private var compositeAudioURL: URL?
     @State private var compositeAudioError: String?
+
+    init(
+        meetingID: MeetingID, environment: AppEnvironment, initialTab: Tab = .overview,
+        initialSeekTurnID: TranscriptTurnID? = nil
+    ) {
+        self.meetingID = meetingID
+        self.environment = environment
+        self.initialSeekTurnID = initialSeekTurnID
+        _selectedTab = State(initialValue: initialTab)
+    }
 
     private var titleText: String {
         guard let meeting else { return "" }
@@ -66,7 +86,7 @@ struct MeetingDetailView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(NSPSpacing.large)
             }
-            .background(NSPColor.background)
+            .background(Palette.canvas)
         }
         .navigationTitle(titleText)
         .navigationBarTitleDisplayMode(.inline)
@@ -76,6 +96,9 @@ struct MeetingDetailView: View {
             _ = await (meetingLoad, compositeLoad)
         }
         .onDisappear { playback.stop() }
+        .onChange(of: environment.lastDeletedMeetingID) { _, deletedID in
+            if deletedID == meetingID { dismiss() }
+        }
     }
 
     private var tabStrip: some View {
@@ -88,10 +111,10 @@ struct MeetingDetailView: View {
                     } label: {
                         Label(tab.rawValue, systemImage: tab.symbolName)
                             .font(.subheadline.weight(isSelected ? .semibold : .regular))
-                            .foregroundStyle(isSelected ? .white : NSPColor.primaryText)
+                            .foregroundStyle(isSelected ? .white : Palette.textPrimary)
                             .padding(.horizontal, NSPSpacing.medium)
                             .padding(.vertical, NSPSpacing.small)
-                            .background(isSelected ? NSPColor.accent : NSPColor.secondaryBackground, in: .capsule)
+                            .background(isSelected ? Palette.accent.foreground : Palette.fill, in: .capsule)
                     }
                     .accessibilityAddTraits(isSelected ? .isSelected : [])
                 }
@@ -114,13 +137,19 @@ struct MeetingDetailView: View {
                 NotesTab(meeting: meeting, environment: environment)
             case .transcript:
                 TranscriptTab(
-                    meeting: meeting, environment: environment, playback: playback, compositeAudioURL: compositeAudioURL
+                    meeting: meeting, environment: environment, playback: playback,
+                    compositeAudioURL: compositeAudioURL, initialSeekTurnID: initialSeekTurnID
                 )
             case .audio:
                 AudioTab(
                     meeting: meeting, environment: environment, playback: playback,
-                    compositeAudioURL: compositeAudioURL,
-                    compositeAudioError: compositeAudioError)
+                    compositeAudioURL: compositeAudioURL, compositeAudioError: compositeAudioError,
+                    onMeetingChanged: {
+                        Task {
+                            await loadMeeting()
+                            await loadCompositeAudio()
+                        }
+                    })
             case .actions:
                 ActionsTab(meeting: meeting, environment: environment)
             case .insights:
@@ -161,7 +190,7 @@ struct MeetingDetailView: View {
     /// yet" empty state for that case.
     private func loadCompositeAudio() async {
         do {
-            let segments = try await environment.segmentRepository.fetchAll(meetingID: meetingID)
+            let segments = try await environment.segmentRepository.fetchAll(owner: .meeting(meetingID))
             guard !segments.isEmpty else { return }
             let container = try environment.makeMeetingContainer(meetingID: meetingID)
             compositeAudioURL = try await SegmentStitcher().buildOrReuseComposite(
@@ -172,68 +201,9 @@ struct MeetingDetailView: View {
     }
 }
 
-/// docs/07 §4's Overview tab: duration, availability, processing mode, and
-/// lifecycle state, plus the real executive-summary `Insight` once
-/// processing has produced one. Chapters and participants still aren't
-/// generated by anything this pass — shown as explicit absence, not blank
-/// space that looks broken.
-private struct OverviewTab: View {
-    let meeting: Meeting
-    let environment: AppEnvironment
-
-    @State private var executiveSummary: Insight?
-
-    private var durationLabel: String {
-        guard meeting.canonicalDuration.sampleCount > 0 else { return "—" }
-        let totalSeconds = Int(meeting.canonicalDuration.seconds)
-        return String(format: "%d:%02d:%02d", totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60)
-    }
-
-    private var availabilityLabel: String {
-        switch meeting.availability {
-        case .complete: return "Complete"
-        case .partial(let missing): return "Partial — \(missing.count) segment\(missing.count == 1 ? "" : "s") missing"
-        case .recoverable: return "Recoverable"
-        case .failed: return "Failed"
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: NSPSpacing.large) {
-            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
-                MeetingStateBadge(state: meeting.lifecycleState)
-                LabeledContent("Duration", value: durationLabel)
-                LabeledContent("Availability", value: availabilityLabel)
-                LabeledContent("Processing mode", value: meeting.processingMode.rawValue)
-                LabeledContent("Started", value: meeting.startedAt.formatted(date: .abbreviated, time: .shortened))
-            }
-            .nspCard()
-
-            if let executiveSummary {
-                VStack(alignment: .leading, spacing: NSPSpacing.small) {
-                    Text("Summary").font(.headline)
-                    Text(executiveSummary.text).font(.body)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .nspCard()
-            } else {
-                EmptyTabPlaceholder(
-                    title: "No recap yet", systemImage: "sparkles",
-                    message: "A flash recap and executive summary appear here once this meeting is processed.")
-            }
-        }
-        .task { await loadExecutiveSummary() }
-    }
-
-    private func loadExecutiveSummary() async {
-        let insights = try? await environment.insightRepository.fetchAll(meetingID: meeting.meetingID)
-        executiveSummary = insights?.first { $0.layer == .executiveSummary }
-    }
-}
-
 /// A correct, explicit "nothing here yet" state (docs/07 §11) — never a
 /// blank view that could be mistaken for a loading or broken screen.
-private struct EmptyTabPlaceholder: View {
+struct EmptyTabPlaceholder: View {
     let title: String
     let systemImage: String
     let message: String

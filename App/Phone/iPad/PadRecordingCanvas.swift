@@ -80,7 +80,7 @@ struct PadRecordingCanvas: View {
                 .allowsHitTesting(isInkToolActive)
             }
         }
-        .background(NSPColor.background)
+        .background(Palette.canvas)
         .task {
             await loadMeetingTitle()
             await loadExistingLines()
@@ -126,7 +126,7 @@ struct PadRecordingCanvas: View {
                     .onSubmit { Task { await saveMeetingTitle() } }
                 TextField("Subtitle", text: $meetingSubtitle)
                     .font(.system(.title3, design: .rounded).weight(.semibold))
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .foregroundStyle(Palette.textTertiary)
                     .onSubmit { Task { await saveMeetingSubtitle() } }
             }
             .multilineTextAlignment(.center)
@@ -240,7 +240,8 @@ struct PadRecordingCanvas: View {
         let now = environment.clock.now()
         let text = lines[index].text
         let block = NoteBlock(
-            blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: selfPersonID, type: .richText,
+            blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(meetingID), authorID: selfPersonID,
+            type: .richText,
             content: .text(text), creationRange: SampleRange(startSample: sampleOffset, endSample: sampleOffset),
             privacy: .shared,
             opLog: [Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: .text(text))])
@@ -282,7 +283,7 @@ struct PadRecordingCanvas: View {
     private func loadExistingLines() async {
         guard let meetingID = session.meetingID else { return }
         do {
-            let blocks = try await environment.noteBlockRepository.fetchAll(meetingID: meetingID)
+            let blocks = try await environment.noteBlockRepository.fetchAll(owner: .meeting(meetingID))
             let richTextBlocks = blocks.filter { $0.type == .richText }.sorted {
                 $0.creationRange.startSample < $1.creationRange.startSample
             }

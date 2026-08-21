@@ -8,7 +8,7 @@ import Testing
 struct ManifestTests {
     private static func makeManifest(segments: [ManifestSegmentRecord], sealed: Bool, sealedAt: Date?) -> Manifest {
         Manifest(
-            meetingID: MeetingID(rawValue: UUID()),
+            owner: .meeting(MeetingID(rawValue: UUID())),
             deviceID: DeviceID(rawValue: UUID()),
             captureMode: .watch,
             audioFormat: Manifest.AudioFormat(codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000),

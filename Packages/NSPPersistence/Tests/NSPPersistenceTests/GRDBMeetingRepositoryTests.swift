@@ -154,8 +154,8 @@ struct GRDBMeetingRepositoryTests {
 
         let actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
         let action = Action(
-            actionID: ActionID(rawValue: UUID()), meetingID: meeting.meetingID, text: "Follow up", evidence: [],
-            createdBy: personID)
+            actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: meeting.meetingID,
+            text: "Follow up", evidence: [], createdBy: personID)
         try await actionRepository.insert(action, at: meeting.createdAt)
 
         try await meetingRepository.delete(meeting.meetingID)

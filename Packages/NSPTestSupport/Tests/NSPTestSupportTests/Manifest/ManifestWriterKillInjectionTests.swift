@@ -22,17 +22,17 @@ struct ManifestWriterKillInjectionTests {
         return decoder
     }
 
-    private static func makeContainer() -> MeetingContainer {
+    private static func makeContainer(meetingID: MeetingID = MeetingID(rawValue: UUID())) -> MeetingContainer {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("ManifestWriterKillInjection-\(UUID().uuidString)", isDirectory: true)
-        let container = MeetingContainer(appContainerURL: root, meetingID: MeetingID(rawValue: UUID()))
+        let container = MeetingContainer(appContainerURL: root, meetingID: meetingID)
         try? FileManager.default.createDirectory(at: container.rootURL, withIntermediateDirectories: true)
         return container
     }
 
     private static func makeManifest(meetingID: MeetingID, deviceID: DeviceID, segmentCount: Int) -> Manifest {
         var manifest = Manifest(
-            meetingID: meetingID, deviceID: deviceID, captureMode: .watch,
+            owner: .meeting(meetingID), deviceID: deviceID, captureMode: .watch,
             audioFormat: Manifest.AudioFormat(codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000),
             createdAt: Date(timeIntervalSince1970: 0))
         manifest.segments = (0..<segmentCount).map { sequence in
@@ -75,11 +75,12 @@ struct ManifestWriterKillInjectionTests {
     }
 
     @Test func test_uninterruptedScript_takesExactlyFortySteps() async throws {
-        let container = Self.makeContainer()
+        let meetingID = MeetingID(rawValue: UUID())
+        let container = Self.makeContainer(meetingID: meetingID)
         let killSwitch = KillInjectingManifestFileSystem(wrapping: LiveManifestFileSystem(), killAtStep: nil)
         let writer = ManifestWriter(container: container, fileSystem: killSwitch)
 
-        try await Self.runScript(writer: writer, meetingID: container.meetingID, deviceID: DeviceID(rawValue: UUID()))
+        try await Self.runScript(writer: writer, meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()))
 
         #expect(killSwitch.stepsAttempted == 40)
     }
@@ -88,7 +89,8 @@ struct ManifestWriterKillInjectionTests {
         let totalSteps = 40
 
         for killAtStep in 1...totalSteps {
-            let container = Self.makeContainer()
+            let meetingID = MeetingID(rawValue: UUID())
+            let container = Self.makeContainer(meetingID: meetingID)
             defer { try? FileManager.default.removeItem(at: container.rootURL) }
 
             let killSwitch = KillInjectingManifestFileSystem(
@@ -98,7 +100,7 @@ struct ManifestWriterKillInjectionTests {
             var caughtTheInjectedKill = false
             do {
                 try await Self.runScript(
-                    writer: writer, meetingID: container.meetingID, deviceID: DeviceID(rawValue: UUID()))
+                    writer: writer, meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()))
             } catch is KillInjectingManifestFileSystem.KillInjected {
                 caughtTheInjectedKill = true
             }

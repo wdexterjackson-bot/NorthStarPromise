@@ -8,8 +8,9 @@ import Testing
 @Suite("NSP-040 — Intelligence protocol mocks")
 struct IntelligenceMocksTests {
     @Test func test_mockTranscriber_replaysTheFixtureOnDeviceAndRemote() async throws {
+        let meetingID = MeetingID(rawValue: UUID())
         let turn = TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: UUID()), meetingID: MeetingID(rawValue: UUID()), revision: 1,
+            turnID: TranscriptTurnID(rawValue: UUID()), owner: .meeting(meetingID), revision: 1,
             isProvisional: false,
             tokens: [Token(text: "hello", startSample: 0, endSample: 100, confidence: 0.95)], segmentRefs: [])
         let fixture = TranscriptionResult(
@@ -18,7 +19,7 @@ struct IntelligenceMocksTests {
                 modelID: "m", modelVersion: "1", promptVersion: "1", generatedAt: Date(timeIntervalSince1970: 0),
                 processingPlane: .onDevice))
         let transcriber = MockTranscriber(fixtureResult: fixture)
-        let request = TranscriptionRequest(meetingID: turn.meetingID, segments: [], expectedLanguages: [])
+        let request = TranscriptionRequest(meetingID: meetingID, segments: [], expectedLanguages: [])
 
         let result = try await transcriber.transcribeOnDevice(request)
         #expect(result.turns == [turn])

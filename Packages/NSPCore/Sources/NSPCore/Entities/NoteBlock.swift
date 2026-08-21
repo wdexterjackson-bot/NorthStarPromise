@@ -26,7 +26,7 @@ public struct Operation: Sendable, Hashable, Codable {
 public struct NoteBlock: Sendable, Hashable, Codable, Identifiable {
     public let blockID: NoteBlockID
     public var id: NoteBlockID { blockID }
-    public let meetingID: MeetingID
+    public let owner: ContentOwnerRef
     public let authorID: PersonID
 
     public let type: NoteBlockType
@@ -41,7 +41,7 @@ public struct NoteBlock: Sendable, Hashable, Codable, Identifiable {
 
     public init(
         blockID: NoteBlockID,
-        meetingID: MeetingID,
+        owner: ContentOwnerRef,
         authorID: PersonID,
         type: NoteBlockType,
         content: BlockContent,
@@ -51,7 +51,7 @@ public struct NoteBlock: Sendable, Hashable, Codable, Identifiable {
         opLog: [Operation] = []
     ) {
         self.blockID = blockID
-        self.meetingID = meetingID
+        self.owner = owner
         self.authorID = authorID
         self.type = type
         self.content = content

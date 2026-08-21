@@ -55,7 +55,8 @@ struct PadCanvasHeader: View {
         HStack(spacing: NSPSpacing.medium) {
             if isRecording || isPaused {
                 Text(elapsedLabel)
-                    .font(.callout.monospacedDigit().weight(.bold))
+                    .font(Typo.ui(13, .extrabold))
+                    .monospacedDigit()
                     .foregroundStyle(.white)
                 NSPLevelMeter(level: session.inputLevel, segmentCount: 10).frame(width: 90)
             }
@@ -63,7 +64,7 @@ struct PadCanvasHeader: View {
             recordButton
 
             if isRecording || isPaused {
-                iconButton(symbol: "stop.fill", tint: NSPColor.statusDanger) { isConfirmingStop = true }
+                iconButton(symbol: "stop.fill", tint: Palette.danger.foreground) { isConfirmingStop = true }
                 iconButton(symbol: "flag", isEnabled: isRecording) { Task { await session.addMarker() } }
             }
 
@@ -79,7 +80,7 @@ struct PadCanvasHeader: View {
     private var recordButton: some View {
         Group {
             if isDrafting {
-                iconButton(symbol: "record.circle", tint: NSPColor.statusDanger) { Task { await session.start() } }
+                iconButton(symbol: "record.circle", tint: Palette.danger.foreground) { Task { await session.start() } }
             } else if isPaused {
                 iconButton(symbol: "play.circle.fill", tint: .white) { Task { await session.resume() } }
             } else {
@@ -124,7 +125,7 @@ struct PadCanvasHeader: View {
             if tool != .pen, tool != .highlighter { onSelectNonPenTool() }
         } label: {
             Image(systemName: symbol)
-                .font(.body.weight(.semibold))
+                .font(Typo.ui(14, .bold))
                 .foregroundStyle(activeTool == tool ? Self.backgroundColor : tint)
                 .frame(width: 36, height: 32)
                 .background(activeTool == tool ? Color.white : Color.white.opacity(0.15), in: .rect(cornerRadius: 8))
@@ -146,7 +147,7 @@ struct PadCanvasHeader: View {
     ) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.title3.weight(.semibold))
+                .font(Typo.ui(17, .bold))
                 .foregroundStyle(isEnabled ? tint : tint.opacity(0.35))
         }
         .disabled(!isEnabled)
@@ -156,7 +157,7 @@ struct PadCanvasHeader: View {
     /// inert — never a control that looks live and silently does nothing.
     private func disabledIcon(symbol: String) -> some View {
         Image(systemName: symbol)
-            .font(.title3.weight(.semibold))
+            .font(Typo.ui(17, .bold))
             .foregroundStyle(.white.opacity(0.3))
     }
 }

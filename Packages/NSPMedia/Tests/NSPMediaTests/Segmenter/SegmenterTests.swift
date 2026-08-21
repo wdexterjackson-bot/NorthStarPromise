@@ -110,7 +110,7 @@ struct SegmenterTests {
         let segmenter = Segmenter(
             container: container, audioEncoder: FakeSegmentAudioEncoder(), segmentFileSystem: LiveSegmentFileSystem(),
             manifestWriter: manifestWriter, segmentRepository: segmentRepository,
-            timelineEventRepository: timelineEventRepository, clock: clock, meetingID: meetingID,
+            timelineEventRepository: timelineEventRepository, clock: clock, owner: .meeting(meetingID),
             deviceID: DeviceID(rawValue: UUID()),
             audioFormat: SegmentAudioFormat(
                 codec: .aacLC, sampleRate: 100, channels: 1, bitRate: 32000), rotationSeconds: rotationSeconds)
@@ -126,7 +126,7 @@ struct SegmenterTests {
         try await fixture.segmenter.beginRecording()
 
         #expect(FileManager.default.fileExists(atPath: fixture.container.inFlightSegmentURL(sequence: 0).path))
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(events.map(\.type) == [.start])
     }
 
@@ -181,7 +181,7 @@ struct SegmenterTests {
         // not per-segment startSample math (docs/03 §4).
         #expect(manifest.segments[1].startSample == 10)
 
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         let resumeEvent = events.first { $0.type == .resume }
         #expect(resumeEvent?.payload == .object(["gapSamples": .number(500)]))
     }
@@ -197,7 +197,7 @@ struct SegmenterTests {
         let manifest = try await fixture.segmenter.stop()
 
         #expect(manifest.segments.count == 2)
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(events.contains { $0.type == .interruptionBegan(cause: .phoneCall) })
         #expect(events.contains { $0.type == .interruptionEnded })
     }
@@ -211,7 +211,7 @@ struct SegmenterTests {
         let manifest = try await fixture.segmenter.stop()
 
         #expect(manifest.segments.count == 2)
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(events.contains { $0.type == .routeChange(from: .builtInMic, to: .bluetooth) })
     }
 
@@ -224,7 +224,7 @@ struct SegmenterTests {
         let manifest = try await fixture.segmenter.stop()
 
         #expect(manifest.segments.count == 1)
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(events.contains { $0.type == .marker(kind: .important) })
     }
 
@@ -236,7 +236,7 @@ struct SegmenterTests {
         let offset = try await fixture.segmenter.addMarker(kind: .actionItem)
 
         #expect(offset == 30)
-        let events = try await fixture.timelineEventRepository.fetchAll(meetingID: fixture.meetingID)
+        let events = try await fixture.timelineEventRepository.fetchAll(owner: .meeting(fixture.meetingID))
         let markerEvent = events.first { $0.type == .marker(kind: .actionItem) }
         #expect(markerEvent?.sampleOffset == 30)
     }
@@ -247,7 +247,7 @@ struct SegmenterTests {
         try await fixture.segmenter.append(samples: [Float](repeating: 0.1, count: 10))
         _ = try await fixture.segmenter.stop()
 
-        let stored = try await fixture.segmentRepository.fetchAll(meetingID: fixture.meetingID)
+        let stored = try await fixture.segmentRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(stored.count == 1)
         #expect(stored[0].transferState == .local)
         #expect(stored[0].sha256 != nil)

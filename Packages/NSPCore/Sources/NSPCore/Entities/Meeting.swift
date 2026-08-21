@@ -18,6 +18,11 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
     public var calendarEventID: String?
 
     public let captureMode: CaptureMode
+    /// What this recording is *for* (docs/07's dual Dashboard start
+    /// actions: "Start Recording a Meeting" vs. "Record a Mental Note") —
+    /// orthogonal to `captureMode`, which is about the capturing device,
+    /// not the user's intent.
+    public var recordingIntent: RecordingIntent
     public let originDeviceID: DeviceID
 
     /// Display and cross-device anchoring only — never timeline math.
@@ -47,6 +52,7 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         subtitle: String? = nil,
         calendarEventID: String? = nil,
         captureMode: CaptureMode,
+        recordingIntent: RecordingIntent = .meeting,
         originDeviceID: DeviceID,
         startedAt: Date,
         endedAt: Date? = nil,
@@ -68,6 +74,7 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         self.subtitle = subtitle
         self.calendarEventID = calendarEventID
         self.captureMode = captureMode
+        self.recordingIntent = recordingIntent
         self.originDeviceID = originDeviceID
         self.startedAt = startedAt
         self.endedAt = endedAt

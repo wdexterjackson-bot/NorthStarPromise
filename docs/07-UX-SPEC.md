@@ -12,13 +12,17 @@ by ID (`I1`–`I7`) from `CLAUDE.md` § 2.
 
 ## 1. Information architecture
 
-Six areas. Nothing else is a top-level destination.
+Six areas. Nothing else is a top-level destination. **Dashboard** replaced **Today** as the first, default
+area — Dashboard is the management hub (every meeting, every open action, across all time); Today narrowed to
+"what do I need to do today" and is reached *from* Dashboard's own Today card, not as a peer top-level area
+(Watch is unaffected — it never had a Today/Dashboard distinction; its root stays the Ready screen).
 
 | Area | Contains | Not allowed here |
 |---|---|---|
-| **Today** | Start capture, in-flight meeting, calendar-linked upcoming events, meetings needing review, transfer/sync attention items | Historical browse |
-| **Library** | All meetings, filters, saved searches, workspaces, archive, trash | Live capture controls |
-| **Meeting** | One meeting's tabs: Overview, Notes, Transcript, Audio, Actions, Insights, Attachments, Sharing, Processing log | Cross-meeting search |
+| **Dashboard** | Start capture, cross-meeting "needs attention," a Library preview, every open action regardless of due date, an explicit Today card, an explicit Ask entry point, an explicit "Projects" placeholder (no project/tag data model exists yet — never a fabricated grouping) | Content scoped to only today (that's Today) |
+| **Today** *(reached from Dashboard, not a top-level area)* | The active/next recording, calendar-linked events happening today, Scheduled Recording's "Upcoming" list, meetings needing review, actions due specifically today | Historical browse, every-open-action-ever (those live in Dashboard) |
+| **Library** | Every artifact the app holds — Meetings, Brain Dumps, and Notes, day-grouped with lifecycle-state filters (a Brain Dump/Note reuses `MeetingState`, so one filter set already covers all three), plus Projects reachable as their own grouping. Not meeting-only: docs/02 § 2's "the Library contains all containers of artifacts," not an implied single kind | Live capture controls |
+| **Meeting** | One meeting's tabs: Overview, Notes, Transcript, Audio, Actions, Insights, Attachments, Sharing, Processing log. Insights merges `Insight` and `Decision` into one chronological list — "things learned or decided" is one category, not two sections | Cross-meeting search |
 | **Ask** | Cross-meeting question answering with a **mandatory** scope selector and citations | Ungrounded answers (I4) |
 | **Actions** | Action + decision ledgers across meetings, owner/date review, export queue, unanswered questions | Silent sends (I6) |
 | **Settings** | Capture defaults, processing mode default, consent + policy, storage, sync/iCloud, integrations, accessibility, diagnostics | Per-meeting overrides (those live in Meeting → Sharing / Overview) |
@@ -27,12 +31,13 @@ Six areas. Nothing else is a top-level destination.
 
 | Area | Watch | iPhone | iPad |
 |---|---|---|---|
-| Today | The app's root: Ready screen | Tab 1 | Sidebar item 1 |
-| Library | Compressed to **History** (recent 20, local-first) | Tab 2 | Sidebar item 2, list column |
+| Dashboard | Not present — Watch root stays the Ready screen | Tab 1 (default) | Segment 1 (default) |
+| Today | Not present | Pushed from Dashboard's Today card | Set via Dashboard's Today card (not a segment) |
+| Library | Compressed to **History** (recent 20, local-first) | Tab 2 | Segment, list column |
 | Meeting | Read-only glance: state, duration, transfer state | Tab-bar detail with 9 tabs | Split canvas + transcript workspace |
-| Ask | Not present | Tab 3 | Sidebar item, opens in its own column or window |
-| Actions | Not present (v1) | Tab 4 | Sidebar item |
-| Settings | Minimal: haptics, mic check, storage, reclaim | Tab 5 | Sidebar item |
+| Ask | Not present | Tab 3 | Segment, opens in its own column or window |
+| Actions | Not present (v1) | Tab 4 | Segment |
+| Settings | Minimal: haptics, mic check, storage, reclaim | Tab 5 | Segment |
 
 **Compression rule (Watch):** the Watch shows only what a wrist glance must answer (§ 3.1). It never shows
 transcript text, summaries, attendee lists, or calendar titles marked `isTitleSensitive`.
@@ -67,6 +72,40 @@ Every entry point resolves to the same `NSPMedia` start path (`docs/01` § 5.1).
 
 A second start request while a meeting is active never creates a silent duplicate: the UI surfaces
 "Already recording on <device>" with the four canonical choices: **Keep recording on Watch**, **Take over on iPhone**, **Record separately**, **Cancel**.
+
+**Brain Dump and standalone Note are separate entry points, not a `Meeting` flavor.** Dashboard's capture
+control (iPhone: a long-press menu; iPad: three buttons in `PadDashboardSidebar`) offers three distinct starts:
+a real Meeting (red mic, table above), a Brain Dump (purple brain icon — real audio capture through the same
+`Arming → Recording` path, but a `BrainDump` row, never a `Meeting`), and a standalone Note (blue pencil icon —
+creates a bare `Note` row with no capture yet, docs/02 § 2's "notes before recording" shape). Only iPhone/iPad
+have these two entry points today — no Watch, widget, Siri, or Shortcuts path starts a Brain Dump/Note yet.
+
+### 2.1 Scheduled Recording
+
+Formalizes the **Calendar notification** entry point above into a standalone feature: the user pre-schedules a
+recording — a name, a start time, and a stop time — either typed in manually or imported from an existing
+calendar event they pick from a list, so they don't have to remember to start it later.
+
+- **Creation.** Today's *Upcoming* section (§ 4) lists pending schedules and offers "Schedule a Recording":
+  manual entry (title, start, stop) or "Import from Calendar" (a bounded near-future list of the user's
+  existing events — a materially broader EventKit grant than the write-only one Settings' post-recording
+  calendar-export uses, and its own consent surface, not a silent upgrade of that grant).
+- **Start is a mandatory notification, never silent.** At the scheduled start time, a **Start**/**Skip**
+  notification fires — this *is* the "Calendar notification" row in § 2's table, now with a per-schedule
+  **alert style** the user picks at setup (sound / vibrate / silent-banner, same mental model as the Clock
+  app's alarms). Tapping Start enters the same `Arming` path every other entry point uses, including any
+  workspace-required announcement (§ 7) — a schedule never bypasses that gate. Tapping the notification body
+  (not a button) opens the app without starting anything; only Start starts it.
+- **Stop is fully unattended.** Once recording is live, it stops automatically at the scheduled stop time with
+  no interaction required — unlike start, there is no platform obstacle here, since the app is already alive in
+  an active audio session.
+- **Platform-imposed limits, stated plainly rather than implied away**: iOS/watchOS give third-party apps no
+  way to silently launch and start capture with zero interaction at the trigger moment, which is why start is
+  notification-gated rather than truly automatic. "Vibrate" is best-effort — `UNUserNotificationCenter` has no
+  independent "vibrate without sound" toggle; whether a sound-less notification vibrates is governed by the
+  device's own Settings/Focus state, not a per-request flag. True alarm-class behavior (rings through the mute
+  switch) exists via AlarmKit on iOS/watchOS 26+, which this app's 18.0/11.0 floor doesn't reach yet — a
+  deliberate, scoped fast-follow, not a silent gap.
 
 ---
 
@@ -131,9 +170,19 @@ button and an Open button; it never carries Stop.
 
 ## 4. iPhone screens
 
-**Today.** Sections in fixed order: *Now* (active session card, or nothing), *Needs review* (meetings in
-`ReadyForReview` or `PartialFailure`), *Upcoming* (calendar, if permitted), *Attention* (failed transfers,
-sync errors, storage). Each attention row names a cause and an action.
+**Dashboard.** The default tab. Sections in order: header (date + greeting), a stats strip (meetings this
+week, open actions, overdue count), *Attention Required* (meetings in `ReadyForReview` or `PartialFailure`,
+across all time — not just today), a Today card (meeting count for today, opens Today) alongside a Quick Start
+recording shortcut, an Ask entry card, *Recent Meetings* (a Library preview), *All Actions* (every open action
+regardless of due date), and an explicit *Projects* placeholder — no project/tag data model exists yet, so this
+section names what's coming rather than fabricating a grouping. Sections with nothing to show are simply
+absent.
+
+**Today.** Reached from Dashboard's Today card, not its own tab. Sections in fixed order: *Now* (active session
+card, or nothing), *Needs review* (meetings in `ReadyForReview` or `PartialFailure`), *Upcoming* (pending
+Scheduled Recordings — § 2.1 — manual or calendar-imported, not calendar-derived entries alone), *Due Today*
+(actions whose due date falls today — Dashboard's *All Actions* is the unfiltered, cross-time version of this
+same list). Each attention row names a cause and an action.
 
 **Active session view.** Elapsed time, waveform-free level meter, Marker, Pause, Stop (same confirmation rule
 as § 3.3), capture-device attribution ("Recording on Apple Watch — this iPhone is not capturing"), live

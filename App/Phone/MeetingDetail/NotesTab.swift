@@ -34,7 +34,7 @@ struct NotesTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
             HStack {
-                Text("Notes").font(.headline)
+                Text("Notes").font(Typo.ui(15, .bold))
                 Spacer()
                 Button {
                     composerTarget = .new
@@ -45,7 +45,7 @@ struct NotesTab: View {
             }
 
             if let loadError {
-                Text(loadError).font(.caption).foregroundStyle(NSPColor.secondaryText)
+                Text(loadError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.textTertiary)
             } else if blocks.isEmpty {
                 ContentUnavailableView(
                     "No notes yet", systemImage: "note.text",
@@ -83,7 +83,7 @@ struct NotesTab: View {
 
     private func load() async {
         do {
-            blocks = try await environment.noteBlockRepository.fetchAll(meetingID: meeting.meetingID)
+            blocks = try await environment.noteBlockRepository.fetchAll(owner: .meeting(meeting.meetingID))
         } catch {
             loadError = "\(error)"
         }
@@ -122,20 +122,20 @@ private struct NoteBlockRowView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: NSPSpacing.medium) {
-            NSPIconBadge(symbolName: block.type.symbolName, tint: NSPColor.statusNeutral, size: 26)
+            NSPIconBadge(symbolName: block.type.symbolName, tint: Palette.textSecondary, size: 26)
 
             VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
                 HStack(spacing: NSPSpacing.extraSmall) {
                     Text(block.type.displayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(NSPColor.secondaryText)
+                        .font(Typo.ui(11.5, .bold))
+                        .foregroundStyle(Palette.textTertiary)
                     if block.privacy == .privateToAuthor {
                         Image(systemName: "lock.fill")
-                            .font(.caption2)
-                            .foregroundStyle(NSPColor.secondaryText)
+                            .font(Typo.ui(10.5, .medium))
+                            .foregroundStyle(Palette.textTertiary)
                     }
                 }
-                Text(previewText).font(.body)
+                Text(previewText).font(Typo.ui(14, .medium))
             }
 
             Spacer(minLength: 0)
@@ -147,7 +147,7 @@ private struct NoteBlockRowView: View {
                 Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .foregroundStyle(Palette.textTertiary)
             }
         }
         .nspCard()
@@ -207,7 +207,7 @@ private struct NoteComposerView: View {
                 TextEditor(text: $text).frame(minHeight: 120)
                 Toggle("Private to me", isOn: $isPrivate)
                 if let saveError {
-                    Text(saveError).font(.caption).foregroundStyle(NSPColor.statusDanger)
+                    Text(saveError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
                 }
             }
             .navigationTitle(editing == nil ? "New note" : "Edit note")
@@ -253,7 +253,7 @@ private struct NoteComposerView: View {
                 // recording is wired to `RecordingSession`'s live position.
                 let anchorSample = meeting.canonicalDuration.sampleCount
                 let block = NoteBlock(
-                    blockID: NoteBlockID(rawValue: UUID()), meetingID: meeting.meetingID, authorID: selfPersonID,
+                    blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(meeting.meetingID), authorID: selfPersonID,
                     type: type, content: content,
                     creationRange: SampleRange(startSample: anchorSample, endSample: anchorSample), privacy: privacy,
                     opLog: [operation])

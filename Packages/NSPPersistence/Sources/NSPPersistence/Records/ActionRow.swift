@@ -14,7 +14,10 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "action_item"
 
     var actionID: String
-    var meetingID: String
+    var workspaceID: String
+    var meetingID: String?
+    var threadID: String?
+    var counterpartyID: String?
     var text: String
     var ownerState: String
     var ownerPersonID: String?
@@ -22,6 +25,11 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
     var dateValue: Date?
     var status: String
     var destination: String?
+    var direction: String
+    var deferCount: Int
+    var askedAgainCount: Int
+    var confidence: Double
+    var edited: Bool
     var createdBy: String
     var confirmedBy: String?
     var createdAt: Date
@@ -30,7 +38,10 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
 
     enum CodingKeys: String, CodingKey {
         case actionID = "action_id"
+        case workspaceID = "workspace_id"
         case meetingID = "meeting_id"
+        case threadID = "thread_id"
+        case counterpartyID = "counterparty_id"
         case text
         case ownerState = "owner_state"
         case ownerPersonID = "owner_person_id"
@@ -38,6 +49,11 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
         case dateValue = "date_value"
         case status
         case destination
+        case direction
+        case deferCount = "defer_count"
+        case askedAgainCount = "asked_again_count"
+        case confidence
+        case edited
         case createdBy = "created_by"
         case confirmedBy = "confirmed_by"
         case createdAt = "created_at"
@@ -47,7 +63,10 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
 
     init(action: Action, createdAt: Date, updatedAt: Date, rowRevision: Int) {
         self.actionID = action.actionID.rawValue.uuidString
-        self.meetingID = action.meetingID.rawValue.uuidString
+        self.workspaceID = action.workspaceID.rawValue.uuidString
+        self.meetingID = action.meetingID?.rawValue.uuidString
+        self.threadID = action.threadID?.rawValue.uuidString
+        self.counterpartyID = action.counterpartyID?.rawValue.uuidString
         self.text = action.text
         switch action.owner {
         case .explicit(let personID):
@@ -73,6 +92,11 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
         }
         self.status = action.status.rawValue
         self.destination = action.destination
+        self.direction = action.direction.rawValue
+        self.deferCount = action.deferCount
+        self.askedAgainCount = action.askedAgainCount
+        self.confidence = action.confidence
+        self.edited = action.edited
         self.createdBy = action.createdBy.rawValue.uuidString
         self.confirmedBy = action.confirmedBy?.rawValue.uuidString
         self.createdAt = createdAt
@@ -84,8 +108,8 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
         guard let actionUUID = UUID(uuidString: actionID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "action_id", value: actionID)
         }
-        guard let meetingUUID = UUID(uuidString: meetingID) else {
-            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "meeting_id", value: meetingID)
+        guard let workspaceUUID = UUID(uuidString: workspaceID) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "workspace_id", value: workspaceID)
         }
         guard let createdByUUID = UUID(uuidString: createdBy) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "created_by", value: createdBy)
@@ -93,19 +117,35 @@ struct ActionRow: Codable, FetchableRecord, PersistableRecord {
         guard let actionStatus = ActionStatus(rawValue: status) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "status", value: status)
         }
+        guard let commitmentDirection = CommitmentDirection(rawValue: direction) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "direction", value: direction)
+        }
 
         return Action(
-            actionID: ActionID(rawValue: actionUUID), meetingID: MeetingID(rawValue: meetingUUID), text: text,
+            actionID: ActionID(rawValue: actionUUID), workspaceID: WorkspaceID(rawValue: workspaceUUID),
+            meetingID: try Self.decodeUUID(meetingID, column: "meeting_id").map { MeetingID(rawValue: $0) },
+            threadID: try Self.decodeUUID(threadID, column: "thread_id").map { NSPThreadID(rawValue: $0) },
+            counterpartyID: try Self.decodeUUID(counterpartyID, column: "counterparty_id").map {
+                PersonID(rawValue: $0)
+            }, text: text,
             owner: try Self.decodeOwner(state: ownerState, personID: ownerPersonID),
             date: try Self.decodeDate(state: dateState, value: dateValue), status: actionStatus,
-            destination: destination, evidence: evidence, createdBy: PersonID(rawValue: createdByUUID),
-            confirmedBy: try confirmedBy.map { string -> PersonID in
-                guard let uuid = UUID(uuidString: string) else {
-                    throw PersistenceError.corruptRow(
-                        table: Self.databaseTableName, column: "confirmed_by", value: string)
-                }
-                return PersonID(rawValue: uuid)
-            }, auditTrail: auditTrail)
+            destination: destination, direction: commitmentDirection, deferCount: deferCount,
+            askedAgainCount: askedAgainCount, confidence: confidence, edited: edited, evidence: evidence,
+            createdBy: PersonID(rawValue: createdByUUID),
+            confirmedBy: try Self.decodeUUID(confirmedBy, column: "confirmed_by").map { PersonID(rawValue: $0) },
+            auditTrail: auditTrail)
+    }
+
+    /// Decodes an optional UUID-string column, `nil` in and `nil` out —
+    /// `meeting_id`/`thread_id`/`counterparty_id`/`confirmed_by` all share
+    /// this exact shape now that `meeting_id` is nullable too.
+    private static func decodeUUID(_ value: String?, column: String) throws -> UUID? {
+        guard let value else { return nil }
+        guard let uuid = UUID(uuidString: value) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: column, value: value)
+        }
+        return uuid
     }
 
     private static func decodeOwner(state: String, personID: String?) throws -> ResolvedValue<PersonID> {

@@ -6,7 +6,13 @@ import NSPCore
 /// touching a real database (docs/11 §4).
 public protocol PersonRepository: Sendable {
     func insert(_ person: Person, at date: Date) async throws
+    func update(_ person: Person, at date: Date) async throws
     func find(_ id: PersonID) async throws -> Person?
+    /// Every person in the workspace — "the list of active people you're
+    /// meeting with" (People feature) — `self` (`AppEnvironment
+    /// .selfPersonID`) included.
+    func fetchAll(workspaceID: WorkspaceID) async throws -> [Person]
+    func delete(_ id: PersonID) async throws
 }
 
 public struct GRDBPersonRepository: PersonRepository {
@@ -24,10 +30,39 @@ public struct GRDBPersonRepository: PersonRepository {
         }
     }
 
+    public func update(_ person: Person, at date: Date) async throws {
+        let id = person.personID.rawValue.uuidString
+        try await dbWriter.write { db in
+            guard let existing = try PersonRow.fetchOne(db, key: id) else {
+                throw PersistenceError.notFound(table: PersonRow.databaseTableName, key: id)
+            }
+            let updated = PersonRow(
+                person: person, createdAt: existing.createdAt, updatedAt: date, rowRevision: existing.rowRevision + 1)
+            try updated.update(db)
+            try Self.replaceAliases(person.aliases, personID: id, in: db)
+        }
+    }
+
     public func find(_ id: PersonID) async throws -> Person? {
         try await dbWriter.read { db in
             guard let row = try PersonRow.fetchOne(db, key: id.rawValue.uuidString) else { return nil }
             return try row.asDomain(aliases: try Self.fetchAliases(personID: row.personID, in: db))
+        }
+    }
+
+    public func fetchAll(workspaceID: WorkspaceID) async throws -> [Person] {
+        try await dbWriter.read { db in
+            try PersonRow
+                .filter(Column("workspace_id") == workspaceID.rawValue.uuidString)
+                .order(Column("name"))
+                .fetchAll(db)
+                .map { row in try row.asDomain(aliases: try Self.fetchAliases(personID: row.personID, in: db)) }
+        }
+    }
+
+    public func delete(_ id: PersonID) async throws {
+        try await dbWriter.write { db in
+            _ = try PersonRow.deleteOne(db, key: id.rawValue.uuidString)
         }
     }
 

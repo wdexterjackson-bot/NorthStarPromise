@@ -21,7 +21,7 @@ struct EvidenceGrounderTests {
             return token
         }
         return TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: UUID()), meetingID: meetingID, revision: 1, isProvisional: false,
+            turnID: TranscriptTurnID(rawValue: UUID()), owner: .meeting(meetingID), revision: 1, isProvisional: false,
             tokens: tokens, segmentRefs: [])
     }
 

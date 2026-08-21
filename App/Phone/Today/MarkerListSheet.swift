@@ -58,10 +58,10 @@ private struct MarkerRow: View {
 
     var body: some View {
         HStack(spacing: NSPSpacing.medium) {
-            NSPIconBadge(symbolName: "flag.fill", tint: NSPColor.statusWarning, size: 26)
+            NSPIconBadge(symbolName: "flag.fill", tint: Palette.warn.foreground, size: 26)
 
             VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
-                Text(timeLabel).font(.caption.weight(.semibold)).foregroundStyle(NSPColor.secondaryText)
+                Text(timeLabel).font(Typo.ui(11.5, .bold)).foregroundStyle(Palette.textTertiary)
                 TextField("What's this about?", text: $text)
                     .onSubmit { save() }
             }

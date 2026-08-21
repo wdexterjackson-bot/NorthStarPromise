@@ -34,7 +34,7 @@ struct SegmentStitcherGoldenAudioTests {
             let sha256 = try LiveSegmentFileSystem().sha256(ofFileAt: url)
             segments.append(
                 Segment(
-                    segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: deviceID,
+                    segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID), deviceID: deviceID,
                     sequence: sequence, codec: format.codec, sampleRate: format.sampleRate,
                     channels: format.channels, bitRate: format.bitRate, startSample: startSample,
                     sampleCount: Int64(sampleCount), sha256: sha256, localURL: url))

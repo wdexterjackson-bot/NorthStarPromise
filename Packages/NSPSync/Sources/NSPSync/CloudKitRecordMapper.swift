@@ -54,6 +54,31 @@ extension CKRecord {
 /// dedupe by `sha256` is NSP-035's job — this only attaches the asset when
 /// a local file is already known.
 public enum CloudKitRecordMapper {
+    // MARK: - Content owner (Meeting / BrainDump / Note)
+
+    /// `segment`/`transcript_turn` sync only ever carries a `Meeting` owner
+    /// today — `Note`/`BrainDump` have no sync scaffolding yet, matching
+    /// `Action`/`Decision`/`NSPThread`'s own not-yet-synced state. Still
+    /// encodes the real `ownerKind` (not just the meeting id) so a future
+    /// sync pass for the other two owner kinds is additive, not another
+    /// migration of already-synced records.
+    static func encodeOwner(_ owner: ContentOwnerRef) -> (id: String, kind: String) {
+        switch owner {
+        case .meeting(let id): return (id.rawValue.uuidString, "meeting")
+        case .brainDump(let id): return (id.rawValue.uuidString, "brainDump")
+        case .note(let id): return (id.rawValue.uuidString, "note")
+        }
+    }
+
+    static func decodeOwner(id: UUID, kind: String, recordType: String) throws -> ContentOwnerRef {
+        switch kind {
+        case "meeting": return .meeting(MeetingID(rawValue: id))
+        case "brainDump": return .brainDump(BrainDumpID(rawValue: id))
+        case "note": return .note(NoteID(rawValue: id))
+        default: throw SyncError.malformedField(record: recordType, field: "ownerKind")
+        }
+    }
+
     // MARK: - Meeting
 
     public static func recordID(for meetingID: MeetingID, zoneID: CKRecordZone.ID) -> CKRecord.ID {
@@ -151,7 +176,9 @@ public enum CloudKitRecordMapper {
         let record = CKRecord(
             recordType: CloudKitRecordType.segment, recordID: recordID(for: segment.segmentID, zoneID: zoneID))
 
-        record["meetingID"] = segment.meetingID.rawValue.uuidString as CKRecordValue
+        let owner = Self.encodeOwner(segment.owner)
+        record["meetingID"] = owner.id as CKRecordValue
+        record["ownerKind"] = owner.kind as CKRecordValue
         record["deviceID"] = segment.deviceID.rawValue.uuidString as CKRecordValue
         record["sequence"] = segment.sequence as CKRecordValue
         record["codec"] = segment.codec.rawValue as CKRecordValue
@@ -184,6 +211,11 @@ public enum CloudKitRecordMapper {
             throw SyncError.malformedField(record: recordType, field: "recordID")
         }
         let meetingUUID = try record.requiredUUID(forKey: "meetingID", recordType: recordType)
+        // Absent on a record synced before `ownerKind` existed — every such
+        // record predates `Note`/`BrainDump`, so `.meeting` is the correct
+        // (not merely default) reading, not a guess.
+        let ownerKind = (record["ownerKind"] as? String) ?? "meeting"
+        let owner = try Self.decodeOwner(id: meetingUUID, kind: ownerKind, recordType: recordType)
         let deviceUUID = try record.requiredUUID(forKey: "deviceID", recordType: recordType)
         guard let codec = AudioCodec(rawValue: try record.requiredString(forKey: "codec", recordType: recordType))
         else {
@@ -200,7 +232,7 @@ public enum CloudKitRecordMapper {
             ?? .local
 
         return Segment(
-            segmentID: SegmentID(rawValue: segmentUUID), meetingID: MeetingID(rawValue: meetingUUID),
+            segmentID: SegmentID(rawValue: segmentUUID), owner: owner,
             deviceID: DeviceID(rawValue: deviceUUID), sequence: sequence, codec: codec, sampleRate: sampleRate,
             channels: channels, bitRate: bitRate, startSample: startSample, sampleCount: sampleCount,
             sha256: record["sha256"] as? Data, localURL: nil, cloudAssetRef: record["cloudAssetRef"] as? String,
@@ -217,7 +249,9 @@ public enum CloudKitRecordMapper {
         let record = CKRecord(
             recordType: CloudKitRecordType.transcriptTurn, recordID: recordID(for: turn.turnID, zoneID: zoneID))
 
-        record["meetingID"] = turn.meetingID.rawValue.uuidString as CKRecordValue
+        let owner = Self.encodeOwner(turn.owner)
+        record["meetingID"] = owner.id as CKRecordValue
+        record["ownerKind"] = owner.kind as CKRecordValue
         record["revision"] = turn.revision as CKRecordValue
         record["isProvisional"] = turn.isProvisional as CKRecordValue
         record["speakerClusterID"] = turn.speakerClusterID as CKRecordValue?

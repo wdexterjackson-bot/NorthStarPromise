@@ -50,7 +50,12 @@ public actor ZoneSyncEngine {
                 case CloudKitRecordType.segment:
                     let segment = try CloudKitRecordMapper.segment(from: record)
                     try await upsertSegment(segment)
-                    touchedMeetingIDs.insert(segment.meetingID)
+                    // `Note`/`BrainDump` segments have no sync scaffolding
+                    // yet (`CloudKitRecordMapper`'s own doc comment) — only
+                    // a meeting-owned segment feeds availability recompute.
+                    if case .meeting(let meetingID) = segment.owner {
+                        touchedMeetingIDs.insert(meetingID)
+                    }
                 default:
                     continue
                 }
@@ -87,7 +92,7 @@ public actor ZoneSyncEngine {
 
     private func recomputeAvailability(for meetingID: MeetingID) async throws {
         guard var meeting = try await meetingRepository.find(meetingID) else { return }
-        let segments = try await segmentRepository.fetchAll(meetingID: meetingID)
+        let segments = try await segmentRepository.fetchAll(owner: .meeting(meetingID))
         meeting.availability = MeetingAvailabilityReconciler.availability(for: segments)
         try await meetingRepository.update(meeting, at: clock.now())
     }

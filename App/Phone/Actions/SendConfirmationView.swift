@@ -32,8 +32,8 @@ struct SendConfirmationView: View {
                         "No integrations are connected yet (Settings → Integrations). Confirming records this "
                             + "as sent — it doesn't deliver anywhere."
                     )
-                    .font(.caption)
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .font(Typo.ui(11.5, .medium))
+                    .foregroundStyle(Palette.textTertiary)
                 }
             }
             .navigationTitle("Confirm Send")

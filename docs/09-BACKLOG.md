@@ -154,16 +154,35 @@ tickets were formally closed as work landed; this note is the accurate high-leve
 
 # M3 — Intelligence depth and cloud plane
 
-**Status as of 2026-08-20:** none of M3 is built — `NSPIntelligence` is still protocol definitions and
-fixture-backed mocks only (confirmed by direct source inspection this date), with nothing in `App/Phone`
-calling into it. The product-direction request that prompted the `docs/04` § 3.2/3.3 additions (name-in-address
-heuristic, closest-device-is-you default, a post-processing "Name Participants" review screen with a
-configurable voice-clip length and a Contacts picker) sits entirely on top of `NSP-075`/`NSP-076` — real
-diarization has to exist before any of that can be real rather than mocked. Read `docs/04-INTELLIGENCE.md`
-§ 3.2/3.3 before starting this milestone; it also documents a hard platform limitation discovered the same
-date — EventKit has no public API to add attendees to a calendar event. **Resolved 2026-08-20: dropped** —
-calendar events stay title/start/end only; no attendee work is planned unless a real server-side calendar
-connector (`NSP-125`+) is built later. No code changed as a result.
+**Status as of 2026-08-21, corrected:** the 2026-08-20 note below this line said "none of M3 is built" — that
+was accurate on 2026-08-20 but is now stale. Since then, real work landed and is wired into `App/Phone`, not
+just protocol definitions: `LiveTranscriber` (`NSPIntelligence/Transcription/`) does canonical batch
+transcription via `SFSpeechRecognizer` with per-segment outcome logging (`NSP-073`-adjacent, no word-level
+alignment job yet — `NSP-074` still open); `LiveOnDeviceSummarizer` generates recaps/decisions/action items
+through `FoundationModels.SystemLanguageModel` with `EvidenceGrounder`-backed citations (`NSP-082`-adjacent,
+one fixed shape, not the eleven-template library — `NSP-083` still open); `OnDeviceEmbedder` + `HybridRetriever`
++ FTS5 back a real single-meeting Ask (`NSP-089`/`NSP-090`-adjacent). `IntelligenceCoordinator.processMeeting`
+is the single entry point every capture and import path (`RecordingSession.stop()`, `AudioImportCoordinator`)
+calls into, and degrades honestly to `.partialFailure` rather than fabricating output when transcription finds
+nothing. **Still genuinely unbuilt**: `NSP-075`/`NSP-076` (diarization/speaker resolution — `DiarizerProtocol`
+exists, only `MockDiarizer` implements it, nothing calls it), `NSP-077`–`NSP-081` (rename scopes, transcript
+revision history, confidence flags, custom vocabulary, multilingual), `NSP-083`–`NSP-088` (template library,
+regeneration, tone controls, correction memory, a dedicated prompt-injection-defense pass beyond
+`EvidenceGrounder`'s own scope), `NSP-091`–`NSP-098` (cross-meeting Ask, saved questions/recurring briefs, Live
+Lens, the entire `Backend/` plane, `Tools/evals` in CI). The scored auto-threading formula (§7.3),
+commitment-direction extraction, and the signals engine (`DashboardComposer`'s `signals: []` placeholder) are
+also still open — see the Dashboard redesign plan's own "Deferred" section.
+
+**Status as of 2026-08-20 (original note, kept for history):** none of M3 is built — `NSPIntelligence` is still
+protocol definitions and fixture-backed mocks only (confirmed by direct source inspection this date), with
+nothing in `App/Phone` calling into it. The product-direction request that prompted the `docs/04` § 3.2/3.3
+additions (name-in-address heuristic, closest-device-is-you default, a post-processing "Name Participants"
+review screen with a configurable voice-clip length and a Contacts picker) sits entirely on top of
+`NSP-075`/`NSP-076` — real diarization has to exist before any of that can be real rather than mocked. Read
+`docs/04-INTELLIGENCE.md` § 3.2/3.3 before starting this milestone; it also documents a hard platform
+limitation discovered the same date — EventKit has no public API to add attendees to a calendar event.
+**Resolved 2026-08-20: dropped** — calendar events stay title/start/end only; no attendee work is planned
+unless a real server-side calendar connector (`NSP-125`+) is built later. No code changed as a result.
 
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
@@ -198,24 +217,42 @@ connector (`NSP-125`+) is built later. No code changed as a result.
 
 # M4 — iPad canvas and Pencil
 
-**Status as of 2026-08-20, updated (v3)** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written
+**Status as of 2026-08-21, updated (v4)** (see `docs/07-UX-SPEC.md` § 5 for the full normative spec, written
 against a reference mockup at `~/Downloads/IMG_0121.PNG`): the iPad shell exists and is real —
 `App/Phone/RootView.swift` picks `PadRootView` vs. the iPhone `TabView` by device idiom at runtime (this is a
-universal app, not a separate target); `App/Phone/iPad/PadRootView.swift` is a working 3-column
-`NavigationSplitView` (sidebar of the five areas → content → meeting detail). `App/Phone/iPad/
-PadRecordingCanvas.swift` has the dark header + tool palette (`PadCanvasHeader`; Pointer/Text/Pen real, the
-rest honestly disabled), an editable title band, the red margin rule, real Apple Pencil ink (`PadInkCanvas`,
-`NSP-100`), **and now `NSP-101`**: `StrokeGroupTracker` + `InkAssetFileSystem` (both in `NSPMedia`, both
-unit-tested) group strokes by time/position and persist each closed group as its own `.sketch` `NoteBlock`
-with an accurate `creationRange`, rather than one page-wide block. **Pre-recording availability is also now
-built**, resolving what was previously flagged as needing a product decision: `RecordingSession.prepareDraft`
-creates a real, notes-capable `Meeting` before capture starts (a new `.draft` state), Today's "New Note
-(before recording)" button (iPad only) enters it, and content created there is permanently stamped `--:--`.
-Still not built: `NSP-102` tap-a-stroke-to-seek (the ink-group data is correct and ready for this, just no
-seek UI yet); no visible per-group margin chip for ink on the page itself; photo insertion; multi-page.
+universal app, not a separate target). `App/Phone/iPad/PadRootView.swift` is now a **3-field layout**, not the
+2-column split the v3 note described: a persistent, full-width, centered top header carries all 8 areas
+(`AppTab.visibleCases`) as one switcher, present for every area including Dashboard — replacing the earlier
+design where Dashboard alone showed a vertical copy of the same 8 items inside its own sidebar while every
+other area used a separate horizontal switcher confined to the leading column. The header hides only while
+`isRecordingSelectedMeeting` (recording or pre-recording draft note-taking), when the ruled-paper canvas takes
+the full window. Below the header, the existing `NavigationSplitView` (sidebar → meeting detail) is unchanged.
+`PadDashboardSidebar` lost its now-redundant `navList`; Today's Agenda gained a "+" (`AddAgendaItemFormView`)
+to add an item directly from the sidebar, with a choice of scheduling it to auto-record (existing
+`ScheduledRecording` path, unchanged) or creating a bare, unrecorded `Meeting` shell (`lifecycleState: .ready`,
+same state `RecordingSession.prepareDraft()` uses) that appears on the agenda immediately with an empty Audio
+tab. `AudioTab` now offers "Import Recording" for any meeting with no segments yet — imports through the same
+durable `AudioFileImporter` path a fresh import uses, then runs `IntelligenceCoordinator.processMeeting`
+automatically (no title prompt, since the meeting was already named) so transcript/notes/actions generate
+without further user action. Also new this pass: `App/Phone/Dashboard/DashboardMentalNoteButton` — a second,
+always-visible circular control next to the iPad capture button for starting a mental note in one tap, instead
+of that flow only being reachable through the capture button's long-press menu.
+
+`App/Phone/iPad/PadRecordingCanvas.swift` has the dark header + tool palette (`PadCanvasHeader`; Pointer/Text/
+Pen real, the rest honestly disabled), an editable title band, the red margin rule, real Apple Pencil ink
+(`PadInkCanvas`, `NSP-100`), and `NSP-101`: `StrokeGroupTracker` + `InkAssetFileSystem` (both in `NSPMedia`,
+both unit-tested) group strokes by time/position and persist each closed group as its own `.sketch` `NoteBlock`
+with an accurate `creationRange`, rather than one page-wide block. Pre-recording availability is built:
+`RecordingSession.prepareDraft` creates a real, notes-capable `Meeting` before capture starts (the `.draft`
+state), Today's "New Note (before recording)" button (iPad only) enters it, and content created there is
+permanently stamped `--:--`. Still not built: `NSP-102` tap-a-stroke-to-seek (the ink-group data is correct
+and ready for this, just no seek UI yet); no visible per-group margin chip for ink on the page itself; photo
+insertion; multi-page.
 Not yet visually verified in Simulator beyond build/lint/test passing — this environment has no UI-automation
 path to tap "Start Recording" and navigate into the canvas for a live screenshot; verify on a real device or
-via manual Simulator interaction before trusting the visual result matches the mockup.
+via manual Simulator interaction before trusting the visual result matches the mockup. This applies to the new
+top-header restructuring too — confirm the 8-item switcher actually fits centered on the 11" iPad's narrower
+window width before treating it as done.
 
 | ID | Title | Module | Acceptance | Req |
 |---|---|---|---|---|
@@ -233,6 +270,13 @@ via manual Simulator interaction before trusting the visual result matches the m
 | NSP-110 | External display presentation mode | Phone (iPad) | Selected notes only; transcript and private content provably not exposed (snapshot test). | SHR-001 |
 | NSP-111 | Handoff and deep links | Phone | Opens the same meeting and active tab across devices. | — |
 | NSP-112 | Note operation log merge | NSPSync | Concurrent offline edits on two devices converge with no lost blocks; `SYN-001` concurrent-edit test green. | SYN-001 |
+| NSP-150 | Start recording from an upcoming agenda item | Phone | An agenda row for a not-yet-recorded, `.ready`-state meeting (created via the "+" form's "don't record automatically" path) offers a one-tap "Start Recording Now" that promotes it into a live session, reusing `RecordingSession`'s existing draft-promotion path (`prepareDraft`/`start()`) rather than creating a second meeting. Needs `RecordingSession` to accept an externally-created meeting ID (today's promotion path only works for a draft the *same* session instance created), and `MeetingDetailView`/`AudioTab` need the live `RecordingSession` threaded through their init to host the control — currently omitted at most call sites. | CAP-001 |
+| NSP-151 | ~~Voice-Memos-parity audio controls~~ — **done 2026-08-21** | Phone, NSPMedia | Audio tab gained ±15s skip, playback speed (`AudioPlaybackController`), a real waveform (`WaveformPeakExtractor`) with a draggable, non-destructive trim (`AudioClipExporter` — never rewrites a segment or the composite, I3 holds), Share (respects the trim), and an honest "Studio Voice" enhancement pass (`StudioVoiceEnhancer`, reusing the existing tier-2/tier-3 noise-suppression code against a derived file, never the canonical audio). Known nit: tapping a transcript marker seeks the raw composite even when Studio Voice is on (`AudioTab.seek(to:)`) — `editState`/`effectiveFileURL` are private to `AudioPlayerCard` and weren't lifted up; low severity, playback still works, just doesn't preserve the enhancement for that one interaction. | NOT-002 |
+| NSP-152 | ~~Default import/export directory~~ — **done 2026-08-21** | Phone | Every launch, `AppEnvironment.init()` ensures a "North-Star Promise" folder exists in the app's `Documents` directory (`AppEnvironmentFactories.resolveStorageDirectories`), separate from the private `Application Support` store every `MeetingContainer` uses. `UIFileSharingEnabled`/`LSSupportsOpeningDocumentsInPlace` (`project.yml`'s `info.properties` — the actual source of truth XcodeGen writes into `Info.plist`; a direct plist edit gets clobbered on the next `make gen`) make it visible in the on-device Files app under On My iPhone/iPad. Verified end-to-end on both the iPhone 17 and iPad Pro 13" (M5) simulators: folder created on first launch, a real file copied in and byte-verified (SHA-256 match) against the source. | — |
+| NSP-153 | `.fileImporter` can't default to the North-Star Promise folder | Phone | SwiftUI's `.fileImporter` (used by `AudioImportSheets`, `AudioTab`'s "Import Recording") has no parameter for an initial/starting directory — confirmed no such overload exists. The picker always opens to iOS's own default location, never the app's "North-Star Promise" folder, even though `AppEnvironment.defaultImportExportDirectoryURL` now exists. Fixing this needs `UIDocumentPickerViewController(forOpeningContentTypes:)` wrapped in `UIViewControllerRepresentable` (it exposes `directoryURL`) in place of `.fileImporter` — a real rewrite of the picker, not a parameter tweak, deliberately not done in this pass to avoid destabilizing the already-working import flow. | — |
+| NSP-154 | Brain Dump artifact distribution | NSPIntelligence, NSPActions | A Brain Dump recording (started via `DashboardBrainDumpButton` → `RecordingSession.startBrainDump()`) is a real top-level `BrainDump` entity now, not a `Meeting` row (the data-model rescope — `Migration012AddNotesAndBrainDumps`) — but nothing processes its contents yet at all: `IntelligenceCoordinator.processMeeting` is still Meeting-only, and `finalizeBrainDump` (`RecordingSessionBrainDumpAndNote.swift`) deliberately does no AI processing, per the user's own words that Brain Dumps need a different track in the future. This ticket is that future track: once a `processBrainDump` entry point exists, the user's stated intent is that its *specific smaller parts* (an action item, a decision, a note fragment) should be attached to whichever existing meetings/projects/action items they're actually relevant to, not left sitting under one undifferentiated recording. Needs real design work before implementation — how "relevant" gets decided (likely reuses `OnDeviceEmbedder`/the threading engine's similarity scoring, §7.3 of the Dashboard spec, rather than a new mechanism), what "attached" means for a fragment that was never itself a `Meeting`, and a human-confirmation point before anything auto-attaches (I6 — nothing should silently redistribute itself across the user's projects). | — |
+| NSP-155 | iPad detail column doesn't recognize a Brain Dump/Note session | Phone | Starting a Brain Dump or a standalone Note on iPad (`PadDashboardSidebar`'s purple-brain/blue-pencil buttons) correctly records/drafts — `TodayView`'s `ActiveSessionCard`/`DraftingNotesCard` are owner-agnostic and work today — but `PadRootView`'s detail column only recognizes an active session via `isRecordingSelectedMeeting` (`selectedMeetingID == recordingSession.meetingID`), which stays `nil` for both, so the detail pane shows the generic "Select a meeting" placeholder instead of a live recording surface. Needs a `BrainDump`/`Note`-aware equivalent of `PadRecordingCanvas` (or a simpler dedicated surface) and routing in `detail` keyed off `recordingSession.brainDumpID`/`.noteID` too, not just `.meetingID`. | — |
+| NSP-156 | ~~Rescope the meeting-organization data model~~ — **done 2026-08-21** | NSPCore, NSPPersistence, NSPMedia, NSPIntelligence, Phone | The user's own corrected mental model, implemented in four phases (full detail in `docs/02-DATA-MODEL.md` §§ 2–5, which this ticket keeps in sync with rather than duplicating): **(A)** `BrainDump`/`Note` are real top-level entities, not disguised `Meeting`s; `Segment`/`TranscriptTurn`/`NoteBlock`/`TimelineEvent` became polymorphic over a new `ContentOwnerRef`, with app-level `OwnedContentCleanup` replacing the SQL cascade a single polymorphic column can't express. **(B)** `RecordingSession.startBrainDump()`/`startStandaloneNote()` retired `RecordingIntent.mentalNote`; the capture pipeline (`Manifest`, `MeetingContainer`, `Segmenter`) generalized to the same `ContentOwnerRef` — deeper surgery than the plan first assumed, since `Manifest`'s on-disk shape and `TimelineEvent` were also `MeetingID`-hardcoded. **(C)** `Meeting`↔`Thread` became real many-to-many (`meeting_thread`, replacing the single `meeting.thread_id` column); `Action` gained an optional `meetingID` (freestanding actions), plus `workspaceID`/`threadID`/`counterpartyID`; `Decision` gained `threadID`. **(D)** `LibraryView` lists all three artifact kinds instead of only meetings; `InsightsTab` merges `Insight`+`Decision` into one list. A real bug was caught mid-rescope (not by review, by launching the app): retiring `.mentalNote` left pre-existing `meeting` rows with that `recording_intent` value undecodable, surfacing as a visible Dashboard error — fixed by a migration converting them into real `BrainDump`s, and by a new regression-test class that specifically checks a migration against *pre-existing* rows (not just rows inserted after `AppDatabase.makeInMemory()` already ran every migration), since that's the exact gap that let the bug through. Remaining known gaps: `NSP-154`, `NSP-155` above. | — |
 
 ---
 
@@ -283,6 +327,11 @@ via manual Simulator interaction before trusting the visual result matches the m
 | NSP-146 | Security review + threat-model tests | all | Every row of the `docs/06` threat table has a passing proving test; external pen test completed. | — |
 | NSP-147 | App Review materials | docs | Recording intent, background behaviour, privacy indicators, and user value documented with screenshots. | — |
 | NSP-148 | Release gate run | all | Every item in `docs/10` § 8 green on hardware, results recorded in `docs/reports/`. | all |
+
+**Appended out of milestone order** — added post-hoc rather than renumbering the sequential table above.
+Conceptually belongs with the M2 Intents-adjacent cluster (`NSP-067`–`NSP-071`), not M6.
+
+| NSP-149 | Scheduled Recording | Phone | Pre-scheduled recording (manual or calendar-imported) with a mandatory Start/Skip local notification (per-schedule alert style: sound/vibrate/silent) and unattended auto-stop; Start always enters the normal Arming path, never a shortcut around a workspace-required announcement. `docs/07` § 2.1. Two open risks need a device spike before the default-off `FeatureFlag.scheduledRecording` can be enabled: EventKit full-access behavior alongside the existing write-only calendar grant, and whether a live recording (and its auto-stop timer) survives backgrounding without `UIBackgroundModes: audio` declared. | INT-001 |
 
 ---
 

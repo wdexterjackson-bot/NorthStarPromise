@@ -102,6 +102,22 @@ Levels are sampled from the tap at 10 Hz on iOS and **2 Hz on Watch** (§ 7). Ea
 state `.critical`, battery below the hard floor (§ 7), and free storage below the reserve (§ 6). Everything
 else — silence, clipping, low level, route churn, interruption, unreachable phone — warns and keeps recording.
 
+### 2.6 Real-time noise suppression (three tiers)
+
+| Tier | Mechanism | Status |
+|---|---|---|
+| 1 | `AVAudioEngine` input node's built-in voice processing (`setVoiceProcessingEnabled`), own AGC disabled | Shipped, always on (best-effort; failure is non-fatal) |
+| 2 | `AudioDynamicsProcessor` — single-band AGC + downward expander (noise gate + expansion zone, RMS-classified per block) | Shipped, always on |
+| 3 | `SpectralNoiseSuppressor` — FFT-based spectral subtraction (Wiener-style spectral gating with a spectral floor), Accelerate/vDSP, overlap-add STFT | ⚠️ Behind `FeatureFlag.tier3SpectralNoiseSuppression`, **default off** pending § 7's hardware validation (battery/CPU cost on Watch, real-room tuning) |
+
+All three run on the audio render tap thread inside `AVAudioEngineCaptureBackend.startEngine` — same
+no-allocation/no-logging/no-actor-hop rules as the rest of this section. When enabled, tier 3 runs *before*
+tier 2 (denoise the raw signal, then normalize loudness on the result) and reuses tier 2's RMS-threshold
+noise/speech classification (below `expanderThresholdDecibels`) to decide when to update its internal noise
+spectral profile, rather than a separate voice-activity detector. Tier 3 inherently adds up to one STFT frame
+(~20–40 ms depending on sample rate) of algorithmic latency between input and corresponding output — invisible
+to a recorder with no live-monitoring path, but worth knowing before building one.
+
 ---
 
 ## 3. The segmenter (`NSPMedia.Segmenter`)

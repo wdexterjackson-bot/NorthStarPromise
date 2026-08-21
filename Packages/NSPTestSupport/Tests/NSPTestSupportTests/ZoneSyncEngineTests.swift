@@ -19,7 +19,7 @@ struct ZoneSyncEngineTests {
 
     private static func makeSegment(meetingID: MeetingID, deviceID: DeviceID, sequence: Int) -> Segment {
         Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: deviceID, sequence: sequence,
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID), deviceID: deviceID, sequence: sequence,
             codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000, startSample: Int64(sequence) * 1000,
             sampleCount: 1000)
     }

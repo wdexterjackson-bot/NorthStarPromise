@@ -17,6 +17,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
     var subtitle: String?
     var calendarEventID: String?
     var captureMode: String
+    var recordingIntent: String
     var originDeviceID: String
     var startedAt: Date
     var endedAt: Date?
@@ -43,6 +44,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         case subtitle
         case calendarEventID = "calendar_event_id"
         case captureMode = "capture_mode"
+        case recordingIntent = "recording_intent"
         case originDeviceID = "origin_device_id"
         case startedAt = "started_at"
         case endedAt = "ended_at"
@@ -72,6 +74,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         self.subtitle = meeting.subtitle
         self.calendarEventID = meeting.calendarEventID
         self.captureMode = meeting.captureMode.rawValue
+        self.recordingIntent = meeting.recordingIntent.rawValue
         self.originDeviceID = meeting.originDeviceID.rawValue.uuidString
         self.startedAt = meeting.startedAt
         self.endedAt = meeting.endedAt
@@ -143,6 +146,10 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
             throw PersistenceError.corruptRow(
                 table: Self.databaseTableName, column: "capture_mode", value: captureMode)
         }
+        guard let recordingIntentValue = RecordingIntent(rawValue: recordingIntent) else {
+            throw PersistenceError.corruptRow(
+                table: Self.databaseTableName, column: "recording_intent", value: recordingIntent)
+        }
         guard let originDeviceUUID = UUID(uuidString: originDeviceID) else {
             throw PersistenceError.corruptRow(
                 table: Self.databaseTableName, column: "origin_device_id", value: originDeviceID)
@@ -200,7 +207,6 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
                 }
                 return ConsentRecordID(rawValue: uuid)
             }
-
         return Meeting(
             meetingID: MeetingID(rawValue: meetingUUID),
             workspaceID: WorkspaceID(rawValue: workspaceUUID),
@@ -209,6 +215,7 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
             subtitle: subtitle,
             calendarEventID: calendarEventID,
             captureMode: captureModeValue,
+            recordingIntent: recordingIntentValue,
             originDeviceID: DeviceID(rawValue: originDeviceUUID),
             startedAt: startedAt,
             endedAt: endedAt,

@@ -30,6 +30,20 @@ public struct AppDatabase: Sendable {
     nonisolated(unsafe) static let allMigrations: [SchemaMigration.Type] = [
         Migration001InitialSchema.self,
         Migration002AddMeetingSubtitle.self,
+        Migration003AddScheduledRecording.self,
+        Migration004AddFTSTriggers.self,
+        Migration005AddProjects.self,
+        Migration006AddNotifyLeadTime.self,
+        Migration007AddPeopleAndThreads.self,
+        Migration008AddScheduledRecordingProject.self,
+        Migration009AddDismissedSuggestions.self,
+        Migration010RenameThreadAndReshape.self,
+        Migration011AddCommitmentFields.self,
+        Migration012AddNotesAndBrainDumps.self,
+        Migration013AddTimelineEventOwnerKind.self,
+        Migration014ConvertMentalNoteMeetings.self,
+        Migration015AddMeetingThreadBridge.self,
+        Migration016AddFreestandingActions.self,
     ]
 
     public static var migrator: DatabaseMigrator {

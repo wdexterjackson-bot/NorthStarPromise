@@ -6,7 +6,10 @@ import SwiftUI
 /// section too: title (or "Untitled meeting" when sensitive/absent), date,
 /// duration, and a state badge. Action count isn't shown yet — NSPActions
 /// isn't wired into any screen in this pass, and a fake "0" would be worse
-/// than omitting the field entirely (docs/07 §11).
+/// than omitting the field entirely (docs/07 §11). Migrated onto the
+/// Dashboard redesign's `Palette`/`Typo` — this row appears everywhere a
+/// meeting does, so it's the highest-leverage single file for the
+/// "consistent throughout the app" migration (Dashboard scope plan).
 @MainActor
 struct MeetingRow: View {
     let meeting: Meeting
@@ -46,11 +49,11 @@ struct MeetingRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: NSPSpacing.medium) {
-            NSPIconBadge(symbolName: captureIcon, tint: MeetingStateBadge.appearance(for: meeting.lifecycleState).tint)
+            TintedIconTile(
+                symbolName: captureIcon, tint: MeetingStateBadge.appearance(for: meeting.lifecycleState).tint)
 
-            VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
-                Text(displayTitle)
-                    .font(.body.weight(.semibold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(displayTitle).font(Typo.ui(14, .bold)).foregroundStyle(Palette.textPrimary)
                 HStack(spacing: NSPSpacing.small) {
                     Text(meeting.startedAt, style: .date)
                     if let durationLabel {
@@ -58,8 +61,8 @@ struct MeetingRow: View {
                         Text(durationLabel)
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(NSPColor.secondaryText)
+                .font(Typo.ui(11.5, .medium))
+                .foregroundStyle(Palette.textTertiary)
 
                 MeetingStateBadge(state: meeting.lifecycleState)
             }
@@ -75,7 +78,7 @@ struct MeetingRow: View {
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
-                        .foregroundStyle(NSPColor.secondaryText)
+                        .foregroundStyle(Palette.textTertiary)
                         .frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
@@ -92,61 +95,60 @@ struct MeetingRow: View {
     }
 }
 
-/// Maps `MeetingState` (docs/02 §3) to a symbol/label/tint — presentation
-/// logic that belongs at the call site, not inside `NSPDesignSystem`
-/// (`NSPStatusBadge`'s own doc comment explains why).
+/// Maps `MeetingState` (docs/02 §3) to a `StatusChip` style/label —
+/// presentation logic that belongs at the call site, not inside
+/// `NSPDesignSystem` (`StatusChip`'s own doc comment explains why).
 struct MeetingStateBadge: View {
     let state: MeetingState
 
     var body: some View {
         let appearance = Self.appearance(for: state)
-        NSPStatusBadge(symbolName: appearance.symbol, label: appearance.label, tint: appearance.tint)
+        StatusChip(appearance.label, style: appearance.style)
     }
 
     /// A named type in place of a 3-member tuple (SwiftLint's `large_tuple`
-    /// rule caps tuples at 2).
+    /// rule caps tuples at 2). `tint` is the `TintedIconTile` color the
+    /// capture-mode icon uses; `style`/`label` drive the `StatusChip`.
     fileprivate struct Appearance {
-        let symbol: String
         let label: String
-        let tint: Color
+        let style: StatusChip.Style
+        let tint: SemanticTint
     }
 
     // swiftlint:disable:next cyclomatic_complexity
     fileprivate static func appearance(for state: MeetingState) -> Appearance {
         switch state {
-        case .ready: return Appearance(symbol: "circle", label: "Ready", tint: NSPColor.statusNeutral)
-        case .arming: return Appearance(symbol: "hourglass", label: "Preparing", tint: NSPColor.statusInProgress)
-        case .recording:
-            return Appearance(symbol: "record.circle.fill", label: "Recording", tint: NSPColor.statusDanger)
-        case .paused: return Appearance(symbol: "pause.circle.fill", label: "Paused", tint: NSPColor.statusWarning)
-        case .interrupted:
-            return Appearance(
-                symbol: "exclamationmark.triangle.fill", label: "Interrupted", tint: NSPColor.statusWarning)
-        case .finalizing:
-            return Appearance(symbol: "hourglass", label: "Finishing up", tint: NSPColor.statusInProgress)
-        case .processing:
-            return Appearance(symbol: "gearshape.fill", label: "Processing", tint: NSPColor.statusInProgress)
-        case .readyForReview:
-            return Appearance(symbol: "checkmark.circle.fill", label: "Needs review", tint: NSPColor.statusWarning)
-        case .approved:
-            return Appearance(symbol: "checkmark.seal.fill", label: "Approved", tint: NSPColor.statusSuccess)
-        case .edited: return Appearance(symbol: "pencil.circle.fill", label: "Edited", tint: NSPColor.statusNeutral)
-        case .shared: return Appearance(symbol: "paperplane.fill", label: "Shared", tint: NSPColor.statusSuccess)
-        case .archived:
-            return Appearance(symbol: "archivebox.fill", label: "Archived", tint: NSPColor.statusNeutral)
-        case .deleted: return Appearance(symbol: "trash.fill", label: "Deleted", tint: NSPColor.statusDanger)
-        case .restored:
-            return Appearance(
-                symbol: "arrow.uturn.backward.circle.fill", label: "Restored", tint: NSPColor.statusNeutral)
-        case .purged: return Appearance(symbol: "trash.slash.fill", label: "Purged", tint: NSPColor.statusDanger)
-        case .recoverable:
-            return Appearance(
-                symbol: "exclamationmark.triangle.fill", label: "Recoverable", tint: NSPColor.statusWarning)
-        case .savedRaw: return Appearance(symbol: "checkmark.circle", label: "Saved", tint: NSPColor.statusSuccess)
+        case .ready: return Appearance(label: "Ready", style: .neutral, tint: neutralTint)
+        case .arming: return Appearance(label: "Preparing", style: .neutral, tint: Palette.accent)
+        case .recording: return Appearance(label: "Recording", style: .danger, tint: Palette.danger)
+        case .paused: return Appearance(label: "Paused", style: .warn, tint: Palette.warn)
+        case .interrupted: return Appearance(label: "Interrupted", style: .warn, tint: Palette.warn)
+        case .finalizing: return Appearance(label: "Finishing up", style: .neutral, tint: Palette.accent)
+        case .processing: return Appearance(label: "Processing", style: .neutral, tint: Palette.accent)
+        case .readyForReview: return Appearance(label: "Needs review", style: .warn, tint: Palette.warn)
+        case .approved: return Appearance(label: "Approved", style: .success, tint: Palette.success)
+        case .edited: return Appearance(label: "Edited", style: .neutral, tint: neutralTint)
+        case .shared: return Appearance(label: "Shared", style: .success, tint: Palette.success)
+        case .archived: return Appearance(label: "Archived", style: .neutral, tint: neutralTint)
+        case .deleted: return Appearance(label: "Deleted", style: .danger, tint: Palette.danger)
+        case .restored: return Appearance(label: "Restored", style: .neutral, tint: neutralTint)
+        case .purged: return Appearance(label: "Purged", style: .danger, tint: Palette.danger)
+        case .recoverable: return Appearance(label: "Recoverable", style: .warn, tint: Palette.warn)
+        case .savedRaw: return Appearance(label: "Saved", style: .success, tint: Palette.success)
         case .partialFailure:
-            return Appearance(
-                symbol: "exclamationmark.triangle.fill", label: "Partial failure", tint: NSPColor.statusDanger)
-        case .failed: return Appearance(symbol: "xmark.circle.fill", label: "Failed", tint: NSPColor.statusDanger)
+            // Warning, not danger — matching `.interrupted`/`.recoverable`'s
+            // tint. This state is reached whenever *some* processing step
+            // didn't produce output (most commonly: the on-device AI
+            // summarizer isn't available on this device/OS, docs/06 §6's
+            // capability-detected note), while the transcript itself is
+            // often still there and readable — that's a legitimate, honest
+            // outcome (`IntelligenceCoordinator`'s own doc comment), not the
+            // same severity as a real failure, so it shouldn't read as one.
+            return Appearance(label: "Needs attention", style: .warn, tint: Palette.warn)
+        case .failed: return Appearance(label: "Failed", style: .danger, tint: Palette.danger)
         }
     }
+
+    private static let neutralTint = SemanticTint(
+        foreground: Palette.textSecondary, background: Palette.fill, border: Palette.border)
 }

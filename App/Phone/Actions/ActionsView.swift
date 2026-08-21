@@ -53,6 +53,7 @@ struct ActionsView: View {
                         }
                         .padding(NSPSpacing.large)
                     }
+                    .background(Palette.canvas)
                 }
             }
             .navigationTitle("Actions")
@@ -96,7 +97,7 @@ struct ActionsView: View {
     private func section(for status: ActionStatus, actions: [Action]) -> some View {
         VStack(alignment: .leading, spacing: NSPSpacing.medium) {
             Label(status.displayName, systemImage: status.symbolName)
-                .font(.headline)
+                .font(Typo.ui(15, .bold))
                 .foregroundStyle(status.tint)
 
             ForEach(actions) { action in
@@ -106,18 +107,21 @@ struct ActionsView: View {
                     showsSelection: isSelecting && status == .proposed,
                     isSelected: selectedIDs.contains(action.actionID),
                     onToggleSelection: { toggleSelection(action.actionID) },
-                    meetingTitle: meetingTitles[action.meetingID])
-                if isSelecting {
+                    meetingTitle: action.meetingID.flatMap { meetingTitles[$0] })
+                // A freestanding action has no meeting to navigate to — the
+                // row just isn't tappable then, same as it isn't while
+                // `isSelecting`.
+                if isSelecting || action.meetingID == nil {
                     card
-                } else if let onSelectMeeting {
+                } else if let onSelectMeeting, let meetingID = action.meetingID {
                     Button {
-                        onSelectMeeting(action.meetingID)
+                        onSelectMeeting(meetingID)
                     } label: {
                         card
                     }
                     .buttonStyle(.plain)
-                } else {
-                    NavigationLink(value: action.meetingID) { card }
+                } else if let meetingID = action.meetingID {
+                    NavigationLink(value: meetingID) { card }
                         .buttonStyle(.plain)
                 }
             }

@@ -22,6 +22,20 @@ to this document in the same PR.
 
 ## 2. Core entities
 
+The Library holds four kinds of top-level container: **Meeting**, **BrainDump**, **Note**, and **Project**
+(a grouping of meetings). A Meeting, a BrainDump, and a standalone Note are three genuinely separate tracks —
+not one entity with a flag. A BrainDump is a recording that is explicitly **not** a meeting (no attendees, no
+calendar linkage, no single project); a Note is a subcomponent of a meeting **or** a standalone component, and
+is never a meeting itself even once it carries a recording. Today's AI processing pipeline
+(`IntelligenceCoordinator`) only runs against Meetings — a BrainDump/Note is captured durably but not yet
+transcribed or summarized; that's tracked as `NSP-154`, not silently deferred.
+
+All three still share one durable capture pipeline — `MeetingContainer` (on-disk layout), `CaptureEngine`/
+`Segmenter` (recording), and the polymorphic `Segment`/`TranscriptTurn`/`NoteBlock`/`TimelineEvent` tables below
+— rather than three parallel copies of that machinery. What makes each an independent top-level entity, not a
+disguised Meeting, is that each has its own table, its own id space, and its own lifecycle — never a shared row
+with a "kind" column.
+
 ### Meeting
 
 | Field | Type | Notes |
@@ -42,16 +56,82 @@ to this document in the same PR.
 | `excludedFromMemory` | `Bool` | Keeps it in the library but out of search/retrieval/index |
 | `createdAt` / `updatedAt` / `deletedAt` | `Date?` | `deletedAt` non-nil ⇒ soft-deleted |
 
-### Segment
+A meeting has no `threadID` column of its own — thread membership is many-to-many; see **Thread** below.
+
+### BrainDump
+
+A real, durable audio recording that is explicitly not a meeting — captured through the same pipeline a
+Meeting uses, minus everything meeting-only (no attendees, no `calendarEventID`, no thread of its own — its
+individual extracted action items/decisions can each join a thread once `NSP-154` lands, but the BrainDump
+itself never does).
+
+| Field | Type | Notes |
+|---|---|---|
+| `brainDumpID` | `BrainDumpID` | UUIDv7 |
+| `workspaceID` | `WorkspaceID` | |
+| `originDeviceID` | `DeviceID` | |
+| `startedAt` / `endedAt` | `Date` / `Date?` | |
+| `canonicalDuration` | `SampleDuration` | |
+| `lifecycleState` | `MeetingState` | Reuses `Meeting`'s lifecycle enum — the states involved (arming, recording, processing…) describe *capturing audio*, not being a meeting |
+| `policyID` / `processingMode` | | Same rules as `Meeting`; `processingMode` frozen at Arming (I5) |
+| `consentRecordID` | `ConsentRecordID?` | |
+| `createdAt` / `updatedAt` / `deletedAt` | | |
+
+### Note
+
+The lightest of the three — audio is genuinely optional. A standalone Note starts as text/ink only;
+`originDeviceID`/`consentRecordID` stay `nil` until (if ever) the user attaches a recording, at which point
+they're set exactly like a Meeting's are.
+
+| Field | Type | Notes |
+|---|---|---|
+| `noteID` | `NoteID` | UUIDv7 |
+| `workspaceID` | `WorkspaceID` | |
+| `title` | `String` | User-set; no calendar linkage |
+| `originDeviceID` | `DeviceID?` | `nil` until a recording is attached |
+| `consentRecordID` | `ConsentRecordID?` | `nil` until a recording is attached |
+| `startedAt` / `endedAt` | `Date` / `Date?` | |
+| `canonicalDuration` | `SampleDuration` | `.zero` (sample rate 1, not 0 — see § 5's precondition note) until a recording exists |
+| `lifecycleState` | `MeetingState` | Same reuse as `BrainDump` |
+| `policyID` / `processingMode` | | |
+| `createdAt` / `updatedAt` / `deletedAt` | | |
+
+### Segment / TranscriptTurn / NoteBlock / TimelineEvent — polymorphic ownership
+
+These four tables no longer carry a hard `meetingID` foreign key. Each instead carries an **owner**, encoded
+as two columns — an id column (still named `meeting_id` for existing-column continuity) and an `owner_kind`
+column (`'meeting'`, `'brainDump'`, or `'note'`) — mirrored in Swift as one shared type:
+
+```swift
+enum ContentOwnerRef: Sendable, Hashable, Codable {
+    case meeting(MeetingID)
+    case brainDump(BrainDumpID)
+    case note(NoteID)
+}
+```
+
+A single column can't hold a real SQL foreign key to three different parent tables, so these four tables
+**deliberately have no FK on their owner column** — integrity is enforced at the app layer instead: each
+owner's own delete path (`MeetingRepository.delete`, `BrainDumpRepository.delete`, `NoteRepository.delete`)
+explicitly deletes its owned segments/transcript turns/note blocks/timeline events first
+(`OwnedContentCleanup`), rather than relying on `ON DELETE CASCADE`. Every other child table these four have —
+`transcript_token`, `note_operation`, `evidence_span`, etc. — is unaffected and still cascades normally off
+`turn_id`/`block_id`.
+
+**Follow-up work, not silently dropped:** FTS indexing (`fts_notes`) and full-text search still only run
+against `owner_kind = 'meeting'` rows — a BrainDump/Note note block is stored durably but not yet searchable.
+Real indexing for those two owner kinds is tracked, not assumed away.
+
+#### Segment
 
 | Field | Type | Notes |
 |---|---|---|
 | `segmentID` | `SegmentID` | |
-| `meetingID` | `MeetingID` | |
+| `owner` | `ContentOwnerRef` | Which Meeting/BrainDump/Note this segment belongs to |
 | `deviceID` | `DeviceID` | Which device produced it |
 | `sequence` | `Int` | Monotonic per device, gapless; a gap means a lost segment and must be surfaced |
 | `codec` / `sampleRate` / `channels` / `bitRate` | | Recorded exactly as configured, not assumed |
-| `startSample` | `Int64` | Offset from meeting sample zero **for that device** |
+| `startSample` | `Int64` | Offset from the owner's sample zero **for that device** |
 | `sampleCount` | `Int64` | Authoritative duration |
 | `sha256` | `Data` | Computed after close, before rename |
 | `localURL` | `URL?` | Nil once reclaimed |
@@ -59,23 +139,23 @@ to this document in the same PR.
 | `transferState` | `TransferState` | `.local, .queued, .inFlight, .receivedUnverified, .verified, .reclaimed, .failed(reason)` |
 | `isRepairedTail` | `Bool` | True if the segment was recovered with a truncated playable boundary |
 
-### TimelineEvent
+#### TimelineEvent
 
 Append-only log that makes the timeline explainable.
 
 | Field | Type | Notes |
 |---|---|---|
-| `eventID`, `meetingID`, `deviceID` | | |
+| `eventID`, `owner`, `deviceID` | | |
 | `type` | `TimelineEventType` | `.start, .pause, .resume, .interruptionBegan(cause), .interruptionEnded, .routeChange(from,to), .marker(kind), .levelWarning(kind), .thermal(state), .batteryWarning, .storageWarning, .sealedStop(reason), .stop` |
 | `sampleOffset` | `Int64` | Monotonic; the only ordering key that matters |
 | `wallClock` | `Date` | Display and cross-device anchoring only |
 | `payload` | `JSON` | Type-specific |
 
-### TranscriptTurn
+#### TranscriptTurn
 
 | Field | Type | Notes |
 |---|---|---|
-| `turnID`, `meetingID` | | |
+| `turnID`, `owner` | | |
 | `revision` | `Int` | Provisional revisions are negative; canonical starts at 1 |
 | `isProvisional` | `Bool` | Provisional text must render visibly differently |
 | `speakerClusterID` | `String?` | From diarization |
@@ -87,11 +167,11 @@ Append-only log that makes the timeline explainable.
 
 Word-level timing is mandatory: tap-to-audio, evidence links, and redaction all depend on it.
 
-### NoteBlock
+#### NoteBlock
 
 | Field | Type | Notes |
 |---|---|---|
-| `blockID`, `meetingID`, `authorID` | | |
+| `blockID`, `owner`, `authorID` | | |
 | `type` | `NoteBlockType` | `.richText, .checklist, .decision, .action, .quote, .question, .code, .table, .sketch, .photo, .linkPreview, .file, .transcriptExcerpt` |
 | `content` | `BlockContent` | Text runs, or an ink/photo asset reference |
 | `creationRange` | `SampleRange` | Start→end sample offsets during which the block was authored — this is what makes tap-to-replay work |
@@ -100,6 +180,29 @@ Word-level timing is mandatory: tap-to-audio, evidence links, and redaction all 
 | `opLog` | `[Operation]` | Ordered operations for conflict-resilient merge |
 
 **AI never mutates a `NoteBlock`.** It may propose a merge, which produces a diff the user approves.
+
+### Thread
+
+A storyline that floats in and through several meetings, notes, and action items at once — more than a single
+action item, but not itself a meeting or a project. Signing a vendor contract extension might thread through
+several 1:1s, a procurement meeting, and vendor emails; none of those containers "is" the thread, they're each
+just touched by it.
+
+| Field | Type | Notes |
+|---|---|---|
+| `threadID` | `NSPThreadID` | |
+| `workspaceID` | `WorkspaceID` | |
+| `title` / `threadDescription` | `String` / `String?` | |
+| `kind` | `ThreadKind` | |
+| `colorSlot` | `Int` | 0–5, computed once at creation, never recomputed |
+| `status` | `NSPThreadStatus` | `.onTrack, .decisionDue, .atRisk, .dormant, .closed` — `.closed` is the only user-set value; every other value is recomputed from open actions/decisions whenever a thread is loaded |
+| `lastTouchedAt` | `Date` | |
+| `createdAt` / `updatedAt` | | |
+
+A meeting joins **zero, one, or several** threads at once via the `meeting_thread` join table (§ 5) — not a
+single `threadID` column on `Meeting`. Independent of `Project` membership; a meeting may have both, either, or
+neither. `Action`/`Decision` can each carry their own `threadID` too, independent of whichever thread(s) their
+meeting belongs to (see below) — a freestanding action with no meeting at all can still thread.
 
 ### Insight (summaries and generated content)
 
@@ -134,12 +237,16 @@ evidence is shown as such; it never silently disappears.
 
 | Field | Action | Decision |
 |---|---|---|
+| `workspaceID` | Real column — an Action's own workspace, not derived via a meeting join (needed so a freestanding action still surfaces in workspace-wide queries) | Derived via its (always-required) meeting's `workspaceID` |
+| `meetingID` | **Optional.** `nil` ⇒ a freestanding action — one the user can act on themselves, not tied to a specific recording (the user's own distinction: an action item is something they control directly, unlike a `Thread`, which needs coordinated effort across meetings/emails/people) | Required — a decision is always made *in* a specific meeting, never freestanding |
+| `threadID` | `NSPThreadID?` — independent of `meetingID`: a freestanding action can carry a thread with no meeting at all, and a meeting-tied action can belong to a thread its meeting doesn't (or vice versa) | `NSPThreadID?` — same independence, but always alongside a real `meetingID` |
+| `counterpartyID` | `PersonID?` — who this commitment is with, so People's "what do I owe this person" is a real filtered query, not a guess from meeting attendees | — |
 | Text | Verb-first, editable, retains original extracted phrase | Decision statement |
 | Owner | Participant/contact/member; `.unresolved` if ambiguous | Approver |
 | Date | Explicit / inferred (visibly labelled) / absent | Decided-at |
 | Status | `Proposed → Confirmed → Sent → InProgress → Done / Dismissed` | `Proposed → Approved → Superseded` |
 | Extra | Dependencies, destination, export receipts | Rationale, alternatives considered, `supersedes` |
-| Evidence | ≥ 1 span, **required to leave `Proposed`** | ≥ 1 span |
+| Evidence | ≥ 1 span, **required to leave `Proposed`** — a freestanding action typically has none: a span needs a real meeting's transcript to quote from (I4), which it doesn't have | ≥ 1 span |
 | Audit | Creator, confirmer, edit history, export attempts and responses | Same |
 
 ### Supporting entities
@@ -156,8 +263,10 @@ evidence is shown as such; it never silently disappears.
 
 ## 3. Meeting lifecycle state machine
 
-Implement in `NSPCore` as an explicit type with an exhaustive transition function. Property tests fuzz random
-command sequences against the invariants below.
+`MeetingState` — despite the name, this is the lifecycle enum `BrainDump` and `Note` reuse too (§ 2): the
+states below describe the process of *capturing audio*, not being a meeting specifically, so a second parallel
+enum would just be the same cases twice. Implement in `NSPCore` as an explicit type with an exhaustive
+transition function. Property tests fuzz random command sequences against the invariants below.
 
 | State | Allowed transitions | Must be durable before entering |
 |---|---|---|
@@ -186,6 +295,8 @@ command sequences against the invariants below.
 
 ```
 <AppContainer>/Meetings/<meetingID>/
+<AppContainer>/BrainDumps/<brainDumpID>/
+<AppContainer>/Notes/<noteID>/
 ├── manifest.json          current sealed manifest
 ├── manifest.json.bak      previous sealed manifest (double-buffered)
 ├── manifest.wal           append-only event log since last seal
@@ -198,6 +309,11 @@ command sequences against the invariants below.
 └── derived/               waveform peaks, chapter thumbnails — regenerable, never authoritative
 ```
 
+One root folder per owner kind — `Meetings/`, `BrainDumps/`, `Notes/` — never merged into one, so a folder
+under `Meetings/` always resolves to a real `meeting` row. Every owner kind gets the identical internal layout
+above; `MeetingContainer` (the type that computes these paths) is named for the common case but is the same
+type for all three, keyed by the same `ContentOwnerRef` § 2 describes.
+
 Data Protection class: `.completeUnlessOpen` for files written while the device may be locked (required for
 wrist-down recording); `.complete` for the database and everything else. Verify with a locked-device test.
 
@@ -206,7 +322,7 @@ wrist-down recording); `.complete` for the database and everything else. Verify 
 ```jsonc
 {
   "version": 1,
-  "meetingID": "0190f3...",
+  "owner": { "meeting": "0190f3..." },
   "deviceID": "watch-A1B2",
   "captureMode": "watch",
   "audioFormat": { "codec": "aac-lc", "sampleRate": 16000, "channels": 1, "bitRate": 32000 },
@@ -236,10 +352,20 @@ fsync, rename over `manifest.json` after copying the old one to `.bak`, then tru
 ## 5. SQLite schema (GRDB)
 
 Tables mirror the entities above:
-`meeting`, `segment`, `timeline_event`, `transcript_turn`, `transcript_token`, `note_block`, `note_operation`,
-`insight`, `evidence_span`, `action_item`, `decision`, `person`, `speaker_cluster`, `glossary_entry`,
-`policy`, `consent_record`, `share_grant`, `integration_receipt`, `audit_event`, `sync_state`, `tombstone`,
-`embedding` (vector), and FTS5 virtual tables `fts_transcript`, `fts_notes`, `fts_insight`.
+`meeting`, `brain_dump`, `note`, `thread`, `meeting_thread` (join table — a meeting may belong to several
+threads at once), `project`, `meeting_project` (join table), `segment`, `timeline_event`, `transcript_turn`,
+`transcript_token`, `note_block`, `note_operation`, `insight`, `evidence_span`, `action_item`, `decision`,
+`person`, `speaker_cluster`, `glossary_entry`, `policy`, `consent_record`, `share_grant`,
+`integration_receipt`, `audit_event`, `sync_state`, `tombstone`, `embedding` (vector), and FTS5 virtual tables
+`fts_transcript`, `fts_notes`, `fts_insight`.
+
+`segment`, `timeline_event`, `transcript_turn`, and `note_block` each carry a `meeting_id` column (legacy
+name, holds any owner's id) plus an `owner_kind` column (`'meeting'` / `'brainDump'` / `'note'`) instead of a
+real foreign key — § 2's `ContentOwnerRef` note explains why. `action_item.meeting_id` is nullable (a
+freestanding action); `action_item.workspace_id` is a real column, not derived through the meeting join.
+`SampleDuration.init(sampleCount:sampleRate:)` has a hard `precondition(sampleRate > 0)` — a zero-duration
+value is always `SampleDuration.zero` (`sampleRate: 1`), never a literal `0`; a `BrainDump`/`Note` row with no
+recording yet must use that same default, not a raw `0`.
 
 Conventions:
 - Migrations are numbered, append-only, and reversible: `Migrations/001_initial.swift`, `002_…`. Never edit a
@@ -264,6 +390,12 @@ Conventions:
 | NoteBlock | `CD_NoteBlock` + ink/photo `CKAsset` |
 | Insight / Action / Decision | One record type each |
 | ShareGrant | CloudKit sharing (`CKShare`) for Apple-native recipients; service links handled outside CloudKit |
+
+`BrainDump`, `Note`, and `Thread` have no row here yet, and the `Insight`/`Action`/`Decision` row above is
+aspirational, not yet implemented — `NSPSync`'s zones and `ZoneSyncEngine` only actually sync `Meeting`/
+`Segment`/`TranscriptTurn` today (`CloudKitRecordMapper`'s own doc comment). `Segment`/`TranscriptTurn` sync
+only ever carries a `Meeting` owner so far, though it already encodes the real `ownerKind` so wiring up
+`BrainDump`/`Note` sync later is additive, not another migration of already-synced records.
 
 Sync rules:
 - Change tokens per zone; incremental fetch; subscription-driven push.

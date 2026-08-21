@@ -24,8 +24,8 @@ public actor FakeNoteBlockRepository: NoteBlockRepository {
         storage[id]
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [NoteBlock] {
-        storage.values.filter { $0.meetingID == meetingID }
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [NoteBlock] {
+        storage.values.filter { $0.owner == owner }
     }
 
     public func delete(_ id: NoteBlockID) async throws {

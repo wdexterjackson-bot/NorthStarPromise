@@ -11,7 +11,8 @@ struct TimelineEventRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "timeline_event"
 
     var eventID: String
-    var meetingID: String
+    var ownerID: String
+    var ownerKind: String
     var deviceID: String
     var type: String
     var typeDetailJSON: String?
@@ -24,7 +25,8 @@ struct TimelineEventRow: Codable, FetchableRecord, PersistableRecord {
 
     enum CodingKeys: String, CodingKey {
         case eventID = "event_id"
-        case meetingID = "meeting_id"
+        case ownerID = "meeting_id"
+        case ownerKind = "owner_kind"
         case deviceID = "device_id"
         case type
         case typeDetailJSON = "type_detail_json"
@@ -38,7 +40,9 @@ struct TimelineEventRow: Codable, FetchableRecord, PersistableRecord {
 
     init(event: TimelineEvent, createdAt: Date, updatedAt: Date, rowRevision: Int) throws {
         self.eventID = event.eventID.rawValue.uuidString
-        self.meetingID = event.meetingID.rawValue.uuidString
+        let owner = ContentOwnerRefColumns.encode(event.owner)
+        self.ownerID = owner.id
+        self.ownerKind = owner.kind
         self.deviceID = event.deviceID.rawValue.uuidString
         let (kind, detail) = try Self.encode(event.type)
         self.type = kind
@@ -92,9 +96,7 @@ struct TimelineEventRow: Codable, FetchableRecord, PersistableRecord {
         guard let eventUUID = UUID(uuidString: eventID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "event_id", value: eventID)
         }
-        guard let meetingUUID = UUID(uuidString: meetingID) else {
-            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "meeting_id", value: meetingID)
-        }
+        let owner = try ContentOwnerRefColumns.decode(id: ownerID, kind: ownerKind, table: Self.databaseTableName)
         guard let deviceUUID = UUID(uuidString: deviceID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "device_id", value: deviceID)
         }
@@ -106,7 +108,7 @@ struct TimelineEventRow: Codable, FetchableRecord, PersistableRecord {
 
         return TimelineEvent(
             eventID: TimelineEventID(rawValue: eventUUID),
-            meetingID: MeetingID(rawValue: meetingUUID),
+            owner: owner,
             deviceID: DeviceID(rawValue: deviceUUID),
             type: try resolveType(),
             sampleOffset: sampleOffset,

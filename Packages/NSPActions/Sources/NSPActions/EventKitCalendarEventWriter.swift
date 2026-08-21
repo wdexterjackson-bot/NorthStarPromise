@@ -8,9 +8,16 @@
     /// with `#if canImport(EventKit)` rather than `#if os(iOS)` since the
     /// same code also works on macOS for `swift test`.
     public final class EventKitCalendarEventWriter: CalendarEventWriter, @unchecked Sendable {
-        private let store = EKEventStore()
+        private let store: EKEventStore
 
-        public init() {}
+        /// Defaults to a fresh store so every existing call site
+        /// (`EventKitCalendarEventWriter()`) keeps compiling unchanged.
+        /// `AppEnvironment` passes a store shared with
+        /// `EventKitCalendarEventReader` instead — see that type's doc
+        /// comment for why sharing one store matters here.
+        public init(store: EKEventStore = EKEventStore()) {
+            self.store = store
+        }
 
         public func requestAccess() async -> CalendarAccessStatus {
             do {

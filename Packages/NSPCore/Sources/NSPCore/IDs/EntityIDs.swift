@@ -28,6 +28,12 @@ public typealias TranscriptTurnID = TypedID<TranscriptTurnIDTag>
 public enum PersonIDTag: Sendable {}
 public typealias PersonID = TypedID<PersonIDTag>
 
+public enum NoteIDTag: Sendable {}
+public typealias NoteID = TypedID<NoteIDTag>
+
+public enum BrainDumpIDTag: Sendable {}
+public typealias BrainDumpID = TypedID<BrainDumpIDTag>
+
 public enum NoteBlockIDTag: Sendable {}
 public typealias NoteBlockID = TypedID<NoteBlockIDTag>
 
@@ -54,3 +60,12 @@ public typealias AuditEventID = TypedID<AuditEventIDTag>
 
 public enum GrantIDTag: Sendable {}
 public typealias GrantID = TypedID<GrantIDTag>
+
+public enum ScheduledRecordingIDTag: Sendable {}
+public typealias ScheduledRecordingID = TypedID<ScheduledRecordingIDTag>
+
+public enum ProjectIDTag: Sendable {}
+public typealias ProjectID = TypedID<ProjectIDTag>
+
+public enum NSPThreadIDTag: Sendable {}
+public typealias NSPThreadID = TypedID<NSPThreadIDTag>

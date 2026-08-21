@@ -43,7 +43,7 @@ struct CalendarEventConfirmationView: View {
                     LabeledContent("Ends", value: endDate.formatted(date: .omitted, time: .shortened))
                 }
                 if let saveError {
-                    Text(saveError).font(.caption).foregroundStyle(NSPColor.statusDanger)
+                    Text(saveError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
                 }
             }
             .navigationTitle("Add to Calendar")

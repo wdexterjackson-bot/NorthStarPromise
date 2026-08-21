@@ -82,7 +82,8 @@ extension PadRecordingCanvas {
             try environment.inkAssetFileSystem.write(data, to: assetURL)
             let content = BlockContent.assetReference(path: relativePath)
             let block = NoteBlock(
-                blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: selfPersonID, type: .sketch,
+                blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(meetingID), authorID: selfPersonID,
+                type: .sketch,
                 content: content, creationRange: group.sampleRange, privacy: .shared,
                 opLog: [
                     Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: content)
@@ -101,7 +102,7 @@ extension PadRecordingCanvas {
     func loadExistingInk() async {
         guard let meetingID = session.meetingID, let container = session.meetingContainer else { return }
         do {
-            let blocks = try await environment.noteBlockRepository.fetchAll(meetingID: meetingID)
+            let blocks = try await environment.noteBlockRepository.fetchAll(owner: .meeting(meetingID))
             let sketchBlocks = blocks.filter { $0.type == .sketch }
             var strokes: [PKStroke] = []
             for block in sketchBlocks {

@@ -32,7 +32,7 @@ struct EntityConstructionTests {
     @Test func test_segment_codable_roundTrips() throws {
         let segment = Segment(
             segmentID: .generate(clock: Self.clock),
-            meetingID: .generate(clock: Self.clock),
+            owner: .meeting(.generate(clock: Self.clock)),
             deviceID: .generate(clock: Self.clock),
             sequence: 0,
             codec: .aacLC,
@@ -70,6 +70,7 @@ struct EntityConstructionTests {
         // (Invariant I4). This test documents that boundary.
         let action = Action(
             actionID: .generate(clock: Self.clock),
+            workspaceID: .generate(clock: Self.clock),
             meetingID: .generate(clock: Self.clock),
             text: "Follow up with legal",
             evidence: [],

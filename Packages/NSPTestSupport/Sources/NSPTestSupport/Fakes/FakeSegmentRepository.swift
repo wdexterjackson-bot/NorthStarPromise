@@ -24,9 +24,9 @@ public actor FakeSegmentRepository: SegmentRepository {
         storage[id]
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [Segment] {
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [Segment] {
         storage.values
-            .filter { $0.meetingID == meetingID }
+            .filter { $0.owner == owner }
             .sorted { $0.sequence < $1.sequence }
     }
 

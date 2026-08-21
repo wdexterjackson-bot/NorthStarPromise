@@ -52,7 +52,7 @@ struct GRDBNoteBlockRepositoryTests {
         content: BlockContent = .text("hello"), opLog: [NSPCore.Operation] = []
     ) -> NoteBlock {
         NoteBlock(
-            blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: authorID, type: type,
+            blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(meetingID), authorID: authorID, type: type,
             content: content, creationRange: SampleRange(startSample: 0, endSample: 1000), opLog: opLog)
     }
 
@@ -135,7 +135,7 @@ struct GRDBNoteBlockRepositoryTests {
         try await repository.insert(first, at: Date())
         try await repository.insert(second, at: Date())
 
-        let all = try await repository.fetchAll(meetingID: meetingID)
+        let all = try await repository.fetchAll(owner: .meeting(meetingID))
 
         #expect(Set(all.map(\.blockID)) == Set([first.blockID, second.blockID]))
     }

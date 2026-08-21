@@ -29,6 +29,11 @@ public actor CaptureEngine {
     private var isCapturing = false
     private var isPaused = false
     private var resolvedFormat: SegmentAudioFormat?
+    /// Set by `start(micProfile:)`, reused by `interruptionEnded()`'s
+    /// re-activation — an interruption resuming the same recording should
+    /// keep the same mic tuning it started with, not silently fall back to
+    /// this type's own default.
+    private var micProfile: MicrophoneProfile = .room
 
     /// Immutable and internally thread-safe (`AudioLevelMeter`'s own
     /// doc comment explains why), so it's exposed `nonisolated` — the UI
@@ -50,11 +55,12 @@ public actor CaptureEngine {
     /// tap. Only after this returns has anything durable happened; a
     /// caller must not report `Recording` before it does (Invariant I1;
     /// surfacing that timing to the UI is NSP-022's job, not this type's).
-    public func start() async throws {
+    public func start(micProfile: MicrophoneProfile = .room) async throws {
         guard !isCapturing else { throw CaptureEngineError.alreadyCapturing }
+        self.micProfile = micProfile
 
         do {
-            try await backend.activateSession(preferredSampleRate: preferredSampleRate)
+            try await backend.activateSession(preferredSampleRate: preferredSampleRate, micProfile: micProfile)
         } catch {
             throw CaptureEngineError.backendFailure("\(error)")
         }
@@ -145,7 +151,7 @@ public actor CaptureEngine {
     /// lives above this type, not inside it.
     public func interruptionEnded() async throws {
         guard isCapturing, isPaused, let segmenter else { throw CaptureEngineError.notCapturing }
-        try await backend.activateSession(preferredSampleRate: preferredSampleRate)
+        try await backend.activateSession(preferredSampleRate: preferredSampleRate, micProfile: micProfile)
         isPaused = false
         try await segmenter.interruptionEnded()
     }

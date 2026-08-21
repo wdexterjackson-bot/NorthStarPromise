@@ -61,7 +61,7 @@ struct CloudKitRecordMapperTests {
     @Test func test_segment_recordCarriesTheCorrectType() {
         let meetingID = MeetingID(rawValue: UUID())
         let segment = Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID), deviceID: DeviceID(rawValue: UUID()),
             sequence: 0, codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000, startSample: 0,
             sampleCount: 1000, sha256: Data(repeating: 1, count: 32))
         let zoneID = WorkspaceZone.recordZoneID(for: WorkspaceID(rawValue: UUID()))
@@ -76,7 +76,7 @@ struct CloudKitRecordMapperTests {
     @Test func test_transcriptTurn_recordCarriesTheCorrectType() throws {
         let meetingID = MeetingID(rawValue: UUID())
         let turn = TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: UUID()), meetingID: meetingID, revision: 1, isProvisional: false,
+            turnID: TranscriptTurnID(rawValue: UUID()), owner: .meeting(meetingID), revision: 1, isProvisional: false,
             tokens: [Token(text: "hi", startSample: 0, endSample: 100, confidence: 0.9)], segmentRefs: [])
         let zoneID = WorkspaceZone.recordZoneID(for: WorkspaceID(rawValue: UUID()))
 

@@ -18,12 +18,27 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>North-Star Promise can show your calendar events so you can turn one into a scheduled recording.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in Settings.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>North-Star Promise transcribes your recordings on this device so it can generate a summary and action items.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>InstrumentSerif-Regular.ttf</string>
+		<string>Manrope-Regular.ttf</string>
+		<string>Manrope-Medium.ttf</string>
+		<string>Manrope-SemiBold.ttf</string>
+		<string>Manrope-Bold.ttf</string>
+		<string>Manrope-ExtraBold.ttf</string>
+	</array>
+	<key>UIFileSharingEnabled</key>
+	<true/>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

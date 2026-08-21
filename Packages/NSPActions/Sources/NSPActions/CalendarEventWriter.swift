@@ -48,11 +48,14 @@ public enum CalendarWriterError: Error, Sendable, Hashable {
 }
 
 /// Writes one event to a user-selected system calendar — "create a
-/// calendar event for recordings" (docs/07 Settings § Calendar). This is
-/// write-only by design: the app never reads the user's existing calendar
-/// data, only ever creates new events the user has explicitly confirmed
-/// (I6), matching `docs/06`'s minimal-access ethos. Protocol-injected so
-/// tests never touch real EventKit/Calendar data (docs/11 §4).
+/// calendar event for recordings" (docs/07 Settings § Calendar). Only ever
+/// creates new events the user has explicitly confirmed (I6). This was
+/// originally write-only by design; `CalendarEventReader` (docs/07 §2.1's
+/// Scheduled Recording import path) now also reads existing events under a
+/// separate, broader EventKit grant — see that protocol's doc comment for
+/// why it's a different type rather than an addition to this one.
+/// Protocol-injected so tests never touch real EventKit/Calendar data
+/// (docs/11 §4).
 public protocol CalendarEventWriter: Sendable {
     func requestAccess() async -> CalendarAccessStatus
     /// Calendars the user could plausibly write a new event into — never

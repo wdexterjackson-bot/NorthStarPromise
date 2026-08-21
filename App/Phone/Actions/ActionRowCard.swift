@@ -40,8 +40,8 @@ struct ActionRowCard: View {
                     onToggleSelection?()
                 } label: {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(isSelected ? NSPColor.accent : NSPColor.secondaryText)
-                        .font(.title3)
+                        .foregroundStyle(isSelected ? Palette.accent.foreground : Palette.textTertiary)
+                        .font(Typo.ui(17, .bold))
                 }
                 .buttonStyle(.plain)
             } else {
@@ -51,11 +51,11 @@ struct ActionRowCard: View {
             VStack(alignment: .leading, spacing: NSPSpacing.extraSmall) {
                 if let meetingTitle {
                     Text(meetingTitle)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(NSPColor.accent)
+                        .font(Typo.ui(11.5, .bold))
+                        .foregroundStyle(Palette.accent.foreground)
                 }
 
-                Text(action.text).font(.body.weight(.medium))
+                Text(action.text).font(Typo.ui(14, .semibold))
 
                 if ownerLabel != nil || dueLabel != nil {
                     HStack(spacing: NSPSpacing.medium) {
@@ -66,8 +66,8 @@ struct ActionRowCard: View {
                             Label(dueLabel, systemImage: "calendar")
                         }
                     }
-                    .font(.caption)
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .font(Typo.ui(11.5, .medium))
+                    .foregroundStyle(Palette.textTertiary)
                 }
 
                 ActionStatusPill(status: action.status)

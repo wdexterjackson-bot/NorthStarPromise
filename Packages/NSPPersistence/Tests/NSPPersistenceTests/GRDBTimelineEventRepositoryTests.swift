@@ -40,7 +40,7 @@ struct GRDBTimelineEventRepositoryTests {
     ) -> TimelineEvent {
         TimelineEvent(
             eventID: TimelineEventID(rawValue: UUID()),
-            meetingID: meetingID,
+            owner: .meeting(meetingID),
             deviceID: DeviceID(rawValue: UUID()),
             type: type,
             sampleOffset: sampleOffset,
@@ -80,7 +80,7 @@ struct GRDBTimelineEventRepositoryTests {
             try await repository.append(event, at: Date())
         }
 
-        let fetched = try await repository.fetchAll(meetingID: meetingID)
+        let fetched = try await repository.fetchAll(owner: .meeting(meetingID))
         #expect(fetched == events)
     }
 
@@ -93,18 +93,20 @@ struct GRDBTimelineEventRepositoryTests {
         // sort the opposite way, to prove sample_offset — not wall_clock —
         // drives ordering (docs/03 §4).
         let later = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .marker(kind: .important), sampleOffset: 5_000,
             wallClock: Date(timeIntervalSince1970: 1_700_000_000))
         let earlier = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .marker(kind: .actionItem), sampleOffset: 1_000,
             wallClock: Date(timeIntervalSince1970: 1_700_000_500))
 
         try await repository.append(later, at: Date())
         try await repository.append(earlier, at: Date())
 
-        let fetched = try await repository.fetchAll(meetingID: meetingID)
+        let fetched = try await repository.fetchAll(owner: .meeting(meetingID))
         #expect(fetched.map(\.eventID) == [earlier.eventID, later.eventID])
     }
 }

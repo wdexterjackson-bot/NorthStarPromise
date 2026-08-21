@@ -20,7 +20,7 @@ struct CKAssetUploaderTests {
 
     private static func makeSegment(meetingID: MeetingID, sha256: Data) -> Segment {
         Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID), deviceID: DeviceID(rawValue: UUID()),
             sequence: 0, codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000, startSample: 0,
             sampleCount: 1000, sha256: sha256)
     }

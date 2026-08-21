@@ -24,7 +24,7 @@ private final class FakeCaptureBackend: CaptureBackend, @unchecked Sendable {
         self.shouldFailActivation = shouldFailActivation
     }
 
-    func activateSession(preferredSampleRate: Double) async throws {
+    func activateSession(preferredSampleRate: Double, micProfile: MicrophoneProfile) async throws {
         if shouldFailActivation { throw CaptureBackendError.sessionActivationFailed("fixture") }
         lock.withLock { activateCallCount += 1 }
     }
@@ -121,7 +121,7 @@ struct CaptureEngineTests {
                 segmentFileSystem: LiveSegmentFileSystem(),
                 manifestWriter: ManifestWriter(container: container, fileSystem: LiveManifestFileSystem()),
                 segmentRepository: segmentRepository, timelineEventRepository: timelineEventRepository,
-                clock: SystemClock(), meetingID: meetingID, deviceID: deviceID, audioFormat: format,
+                clock: SystemClock(), owner: .meeting(meetingID), deviceID: deviceID, audioFormat: format,
                 rotationSeconds: 1000)
         }
 
@@ -173,7 +173,7 @@ struct CaptureEngineTests {
 
         #expect(manifest.validates())
         #expect(manifest.integrity.sealed)
-        let stored = try await fixture.segmentRepository.fetchAll(meetingID: fixture.meetingID)
+        let stored = try await fixture.segmentRepository.fetchAll(owner: .meeting(fixture.meetingID))
         #expect(stored.count == 1)
         #expect(stored[0].sampleCount == 50)
         #expect(fixture.backend.stopEngineCallCount == 1)

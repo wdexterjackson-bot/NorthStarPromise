@@ -23,6 +23,7 @@ private struct SplitMix64: RandomNumberGenerator {
 public actor MockEmbedder: EmbedderProtocol {
     public nonisolated let dimensions: Int
     public nonisolated let modelIdentifier: String
+    public nonisolated let availability: ModelAvailability = .available
 
     public init(dimensions: Int = 8, modelIdentifier: String = "mock-embedder-v1") {
         self.dimensions = dimensions

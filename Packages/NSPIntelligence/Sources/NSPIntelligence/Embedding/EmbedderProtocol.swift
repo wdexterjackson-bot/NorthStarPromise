@@ -8,4 +8,9 @@ public protocol EmbedderProtocol: Sendable {
     /// Embeddings are invalid across model changes (docs/04 §10.3) — every
     /// consumer must key stored vectors by this string.
     var modelIdentifier: String { get }
+    /// Same capability-detected, never-assumed discipline `SummarizerProtocol`
+    /// already carries — a caller checks this before spending work on
+    /// `embedOnDevice` rather than discovering unavailability from an empty
+    /// result.
+    var availability: ModelAvailability { get }
 }

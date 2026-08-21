@@ -20,7 +20,7 @@ struct ActionsTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
             HStack {
-                Text("Actions").font(.headline)
+                Text("Actions").font(Typo.ui(15, .bold))
                 Spacer()
                 Button {
                     isShowingComposer = true
@@ -31,7 +31,7 @@ struct ActionsTab: View {
             }
 
             if let loadError {
-                Text(loadError).font(.caption).foregroundStyle(NSPColor.secondaryText)
+                Text(loadError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.textTertiary)
             } else if actions.isEmpty {
                 ContentUnavailableView(
                     "No actions yet", systemImage: "checkmark.circle",

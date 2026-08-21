@@ -5,7 +5,7 @@ import Foundation
 public struct Segment: Sendable, Hashable, Codable, Identifiable {
     public let segmentID: SegmentID
     public var id: SegmentID { segmentID }
-    public let meetingID: MeetingID
+    public let owner: ContentOwnerRef
     public let deviceID: DeviceID
 
     /// Monotonic per device, gapless. A gap means a lost segment and must be
@@ -34,7 +34,7 @@ public struct Segment: Sendable, Hashable, Codable, Identifiable {
 
     public init(
         segmentID: SegmentID,
-        meetingID: MeetingID,
+        owner: ContentOwnerRef,
         deviceID: DeviceID,
         sequence: Int,
         codec: AudioCodec,
@@ -50,7 +50,7 @@ public struct Segment: Sendable, Hashable, Codable, Identifiable {
         isRepairedTail: Bool = false
     ) {
         self.segmentID = segmentID
-        self.meetingID = meetingID
+        self.owner = owner
         self.deviceID = deviceID
         self.sequence = sequence
         self.codec = codec

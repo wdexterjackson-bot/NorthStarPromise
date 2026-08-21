@@ -8,7 +8,7 @@ public protocol SegmentRepository: Sendable {
     func insert(_ segment: Segment, at date: Date) async throws
     func update(_ segment: Segment, at date: Date) async throws
     func find(_ id: SegmentID) async throws -> Segment?
-    func fetchAll(meetingID: MeetingID) async throws -> [Segment]
+    func fetchAll(owner: ContentOwnerRef) async throws -> [Segment]
 
     /// The dedupe lookup behind "a duplicate upload collapses to the
     /// existing asset" (docs/02 §6, NSP-035): a previously uploaded segment
@@ -57,10 +57,11 @@ public struct GRDBSegmentRepository: SegmentRepository {
         return try row.map { try $0.asDomain() }
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [Segment] {
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [Segment] {
+        let encoded = ContentOwnerRefColumns.encode(owner)
         let rows = try await dbWriter.read { db in
             try SegmentRow
-                .filter(Column("meeting_id") == meetingID.rawValue.uuidString)
+                .filter(Column("meeting_id") == encoded.id && Column("owner_kind") == encoded.kind)
                 .order(Column("sequence"))
                 .fetchAll(db)
         }

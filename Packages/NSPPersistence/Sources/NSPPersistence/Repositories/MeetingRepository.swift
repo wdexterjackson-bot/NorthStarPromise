@@ -9,14 +9,20 @@ public protocol MeetingRepository: Sendable {
     func update(_ meeting: Meeting, at date: Date) async throws
     func find(_ id: MeetingID) async throws -> Meeting?
     func fetchAll(workspaceID: WorkspaceID, includeDeleted: Bool) async throws -> [Meeting]
-    /// Deletes the meeting row outright. Every table with a `meeting_id`
-    /// foreign key declares `ON DELETE CASCADE` (docs/02 §5) and
-    /// `AppDatabase` enables SQLite foreign-key enforcement, so this alone
-    /// removes every segment, note, transcript turn, insight, action, and
-    /// evidence span the meeting owns — no per-table cleanup needed here.
-    /// On-disk cleanup (the audio/ink files themselves) is the caller's
-    /// job, not this repository's (docs/11 §4: repositories own DB rows,
-    /// not the filesystem).
+    /// Every meeting joined to this thread — reads the `meeting_thread`
+    /// join table (`Migration015AddMeetingThreadBridge`; a meeting may
+    /// join several threads at once).
+    func fetchAll(threadID: NSPThreadID) async throws -> [Meeting]
+    /// Deletes the meeting row. Every table with a real `meeting_id` foreign
+    /// key (`insight`, `action_item`, `decision`, `evidence_span`, ...)
+    /// still declares `ON DELETE CASCADE` and cleans up automatically.
+    /// `segment`/`transcript_turn`/`note_block` no longer have that FK —
+    /// they're polymorphic over `Meeting`/`BrainDump`/`Note` now
+    /// (`Migration012AddNotesAndBrainDumps`) — so this explicitly deletes
+    /// those three via `OwnedContentCleanup` first. On-disk cleanup (the
+    /// audio/ink files themselves) is still the caller's job, not this
+    /// repository's (docs/11 §4: repositories own DB rows, not the
+    /// filesystem).
     func delete(_ id: MeetingID) async throws
 }
 
@@ -62,6 +68,7 @@ public struct GRDBMeetingRepository: MeetingRepository {
 
     public func delete(_ id: MeetingID) async throws {
         try await dbWriter.write { db in
+            try OwnedContentCleanup.deleteAll(for: .meeting(id), in: db)
             _ = try MeetingRow.deleteOne(db, key: id.rawValue.uuidString)
         }
     }
@@ -73,6 +80,22 @@ public struct GRDBMeetingRepository: MeetingRepository {
                 request = request.filter(Column("deleted_at") == nil)
             }
             let rows = try request.order(Column("started_at").desc).fetchAll(db)
+            return try rows.map { row in
+                try row.asDomain(missingSegments: try Self.fetchMissingSegments(db, meetingID: row.meetingID))
+            }
+        }
+    }
+
+    public func fetchAll(threadID: NSPThreadID) async throws -> [Meeting] {
+        try await dbWriter.read { db in
+            let rows = try MeetingRow.fetchAll(
+                db,
+                sql: """
+                    SELECT meeting.* FROM meeting
+                    JOIN meeting_thread ON meeting_thread.meeting_id = meeting.meeting_id
+                    WHERE meeting_thread.thread_id = ? AND meeting.deleted_at IS NULL
+                    ORDER BY meeting.started_at DESC
+                    """, arguments: [threadID.rawValue.uuidString])
             return try rows.map { row in
                 try row.asDomain(missingSegments: try Self.fetchMissingSegments(db, meetingID: row.meetingID))
             }

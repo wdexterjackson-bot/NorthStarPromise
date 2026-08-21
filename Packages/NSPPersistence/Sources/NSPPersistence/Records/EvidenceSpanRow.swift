@@ -81,23 +81,8 @@ enum EvidenceSpanPersistence {
     /// Replaces every span for `owner` — same delete-then-reinsert shape
     /// every other exploded-array field in this package uses.
     static func sync(_ db: Database, owner: EvidenceSpanOwner, meetingID: String, spans: [EvidenceSpan]) throws {
-        let ownerColumn: String
-        let ownerValue: String
-        switch owner {
-        case .insight(let id): (ownerColumn, ownerValue) = ("insight_id", id)
-        case .action(let id): (ownerColumn, ownerValue) = ("action_id", id)
-        case .decision(let id): (ownerColumn, ownerValue) = ("decision_id", id)
-        }
-        let existingIDs =
-            try Int64.fetchAll(
-                db, sql: "SELECT evidence_span_id FROM evidence_span WHERE \(ownerColumn) = ?", arguments: [ownerValue])
-        if !existingIDs.isEmpty {
-            let placeholders = existingIDs.map { _ in "?" }.joined(separator: ",")
-            try db.execute(
-                sql: "DELETE FROM evidence_span_turn WHERE evidence_span_id IN (\(placeholders))",
-                arguments: StatementArguments(existingIDs))
-        }
-        try db.execute(sql: "DELETE FROM evidence_span WHERE \(ownerColumn) = ?", arguments: [ownerValue])
+        try clear(db, owner: owner)
+        let ownerValue = owner.value
 
         for (position, span) in spans.enumerated() {
             var row = EvidenceSpanRow(
@@ -119,16 +104,31 @@ enum EvidenceSpanPersistence {
         }
     }
 
+    /// Deletes every span for `owner` without inserting replacements — the
+    /// freestanding-`Action` path (`meetingID == nil`), since a span always
+    /// needs a real meeting's transcript to quote from (Invariant I4) and a
+    /// freestanding action has none. `sync` itself calls this first, then
+    /// re-inserts.
+    static func clear(_ db: Database, owner: EvidenceSpanOwner) throws {
+        let ownerColumn = owner.column
+        let ownerValue = owner.value
+        let existingIDs =
+            try Int64.fetchAll(
+                db, sql: "SELECT evidence_span_id FROM evidence_span WHERE \(ownerColumn) = ?", arguments: [ownerValue])
+        if !existingIDs.isEmpty {
+            let placeholders = existingIDs.map { _ in "?" }.joined(separator: ",")
+            try db.execute(
+                sql: "DELETE FROM evidence_span_turn WHERE evidence_span_id IN (\(placeholders))",
+                arguments: StatementArguments(existingIDs))
+        }
+        try db.execute(sql: "DELETE FROM evidence_span WHERE \(ownerColumn) = ?", arguments: [ownerValue])
+    }
+
     /// Fetches every span for `owner`, in `position` order, with `turnIDs`
     /// reassembled from `evidence_span_turn`.
     static func fetch(_ db: Database, owner: EvidenceSpanOwner) throws -> [EvidenceSpan] {
-        let ownerColumn: String
-        let ownerValue: String
-        switch owner {
-        case .insight(let id): (ownerColumn, ownerValue) = ("insight_id", id)
-        case .action(let id): (ownerColumn, ownerValue) = ("action_id", id)
-        case .decision(let id): (ownerColumn, ownerValue) = ("decision_id", id)
-        }
+        let ownerColumn = owner.column
+        let ownerValue = owner.value
         let rows =
             try EvidenceSpanRow
             .filter(sql: "\(ownerColumn) = ?", arguments: [ownerValue])
@@ -164,6 +164,22 @@ extension EvidenceSpanOwner {
     fileprivate var isDecision: Bool {
         if case .decision = self { return true }
         return false
+    }
+
+    /// The one populated owner column for this case — factored out of
+    /// `sync`/`clear`/`fetch`'s own repeated switches.
+    fileprivate var column: String {
+        switch self {
+        case .insight: return "insight_id"
+        case .action: return "action_id"
+        case .decision: return "decision_id"
+        }
+    }
+
+    fileprivate var value: String {
+        switch self {
+        case .insight(let id), .action(let id), .decision(let id): return id
+        }
     }
 }
 

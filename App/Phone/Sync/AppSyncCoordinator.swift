@@ -101,7 +101,7 @@ public final class AppSyncCoordinator {
 
             for meeting in meetings {
                 _ = try? await pieces.coordinator.syncMeeting(meeting)
-                let segments = try await segmentRepository.fetchAll(meetingID: meeting.meetingID)
+                let segments = try await segmentRepository.fetchAll(owner: .meeting(meeting.meetingID))
                 for segment in segments {
                     _ = try? await pieces.assetUploader.upload(segment, meeting: meeting)
                 }

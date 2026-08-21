@@ -8,7 +8,7 @@ import Testing
 struct MeetingAvailabilityReconcilerTests {
     private static func makeSegment(sequence: Int, deviceID: DeviceID, hasLocalAudio: Bool) -> Segment {
         Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: MeetingID(rawValue: UUID()), deviceID: deviceID,
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(MeetingID(rawValue: UUID())), deviceID: deviceID,
             sequence: sequence, codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000,
             startSample: Int64(sequence) * 1000, sampleCount: 1000,
             localURL: hasLocalAudio ? URL(fileURLWithPath: "/tmp/\(sequence).m4a") : nil)

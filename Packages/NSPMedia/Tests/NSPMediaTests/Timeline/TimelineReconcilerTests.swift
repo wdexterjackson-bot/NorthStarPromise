@@ -8,14 +8,15 @@ import Testing
 struct TimelineReconcilerTests {
     private static func makeSegment(meetingID: MeetingID, sampleCount: Int64) -> Segment {
         Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID), deviceID: DeviceID(rawValue: UUID()),
             sequence: 0, codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000, startSample: 0,
             sampleCount: sampleCount)
     }
 
     private static func makeGapEvent(meetingID: MeetingID, gapSamples: Int64) -> TimelineEvent {
         TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .resume, sampleOffset: 0, wallClock: Date(timeIntervalSince1970: 0),
             payload: .object(["gapSamples": .number(Double(gapSamples))]))
     }
@@ -46,7 +47,8 @@ struct TimelineReconcilerTests {
         let meetingID = MeetingID(rawValue: UUID())
         let segments = [Self.makeSegment(meetingID: meetingID, sampleCount: 1000)]
         let unrelatedEvent = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .marker(kind: .important), sampleOffset: 0, wallClock: Date(timeIntervalSince1970: 0), payload: nil)
 
         let total = TimelineReconciler.canonicalSampleCount(segments: segments, gapClosingEvents: [unrelatedEvent])

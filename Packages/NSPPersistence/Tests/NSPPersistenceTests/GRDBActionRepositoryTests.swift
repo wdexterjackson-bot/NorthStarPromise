@@ -57,12 +57,13 @@ struct GRDBActionRepositoryTests {
     }
 
     private static func makeAction(
-        meetingID: MeetingID, createdBy: PersonID, owner: ResolvedValue<PersonID> = .unresolved,
-        date: ResolvedValue<Date> = .unresolved, status: ActionStatus = .proposed
+        workspaceID: WorkspaceID, meetingID: MeetingID, createdBy: PersonID,
+        owner: ResolvedValue<PersonID> = .unresolved, date: ResolvedValue<Date> = .unresolved,
+        status: ActionStatus = .proposed
     ) -> Action {
         Action(
-            actionID: ActionID(rawValue: UUID()), meetingID: meetingID, text: "Send the recap", owner: owner,
-            date: date, status: status, evidence: [], createdBy: createdBy)
+            actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: meetingID,
+            text: "Send the recap", owner: owner, date: date, status: status, evidence: [], createdBy: createdBy)
     }
 
     @Test func test_insertThenFind_roundTripsEvidenceSpans() async throws {
@@ -75,9 +76,11 @@ struct GRDBActionRepositoryTests {
                 meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 1000, endSample: 2000),
                 quotedText: "I'll send the recap by Friday", transcriptRevision: 1)
         ]
-        var action = Self.makeAction(meetingID: graph.meetingID, createdBy: graph.personID)
+        var action = Self.makeAction(
+            workspaceID: graph.workspaceID, meetingID: graph.meetingID, createdBy: graph.personID)
         action = Action(
-            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            actionID: action.actionID, workspaceID: action.workspaceID, meetingID: action.meetingID, text: action.text,
+            owner: action.owner,
             date: action.date, status: action.status, evidence: evidence, createdBy: action.createdBy)
 
         try await repository.insert(action, at: Date())
@@ -94,9 +97,11 @@ struct GRDBActionRepositoryTests {
         let firstSpan = EvidenceSpan(
             meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 0, endSample: 100),
             quotedText: "first", transcriptRevision: 1)
-        var action = Self.makeAction(meetingID: graph.meetingID, createdBy: graph.personID)
+        var action = Self.makeAction(
+            workspaceID: graph.workspaceID, meetingID: graph.meetingID, createdBy: graph.personID)
         action = Action(
-            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            actionID: action.actionID, workspaceID: action.workspaceID, meetingID: action.meetingID, text: action.text,
+            owner: action.owner,
             date: action.date, status: action.status, evidence: [firstSpan], createdBy: action.createdBy)
         try await repository.insert(action, at: Date())
 
@@ -104,7 +109,8 @@ struct GRDBActionRepositoryTests {
             meetingID: graph.meetingID, turnIDs: [], sampleRange: SampleRange(startSample: 200, endSample: 300),
             quotedText: "second", transcriptRevision: 1)
         action = Action(
-            actionID: action.actionID, meetingID: action.meetingID, text: action.text, owner: action.owner,
+            actionID: action.actionID, workspaceID: action.workspaceID, meetingID: action.meetingID, text: action.text,
+            owner: action.owner,
             date: action.date, status: action.status, evidence: [secondSpan], createdBy: action.createdBy)
         try await repository.update(action, at: Date())
 
@@ -118,7 +124,7 @@ struct GRDBActionRepositoryTests {
         let meetingID = graph.meetingID
         let personID = graph.personID
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        let action = Self.makeAction(meetingID: meetingID, createdBy: personID)
+        let action = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
 
         try await repository.insert(action, at: Date(timeIntervalSince1970: 1_700_000_000))
         let found = try await repository.find(action.actionID)
@@ -134,7 +140,8 @@ struct GRDBActionRepositoryTests {
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
         let dueDate = Date(timeIntervalSince1970: 1_700_100_000)
         let action = Self.makeAction(
-            meetingID: meetingID, createdBy: personID, owner: .explicit(personID), date: .inferred(dueDate))
+            workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID, owner: .explicit(personID),
+            date: .inferred(dueDate))
 
         try await repository.insert(action, at: Date())
         let found = try await repository.find(action.actionID)
@@ -149,7 +156,7 @@ struct GRDBActionRepositoryTests {
         let meetingID = graph.meetingID
         let personID = graph.personID
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        var action = Self.makeAction(meetingID: meetingID, createdBy: personID)
+        var action = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
         action.auditTrail = [
             AuditEntry(actorID: personID, action: "created", at: Date(timeIntervalSince1970: 1)),
             AuditEntry(actorID: personID, action: "confirmed", at: Date(timeIntervalSince1970: 2)),
@@ -167,7 +174,7 @@ struct GRDBActionRepositoryTests {
         let meetingID = graph.meetingID
         let personID = graph.personID
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        let action = Self.makeAction(meetingID: meetingID, createdBy: personID)
+        let action = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
 
         await #expect(throws: PersistenceError.self) { try await repository.update(action, at: Date()) }
     }
@@ -178,8 +185,8 @@ struct GRDBActionRepositoryTests {
         let meetingID = graph.meetingID
         let personID = graph.personID
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        let first = Self.makeAction(meetingID: meetingID, createdBy: personID)
-        let second = Self.makeAction(meetingID: meetingID, createdBy: personID)
+        let first = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
+        let second = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
         try await repository.insert(first, at: Date())
         try await repository.insert(second, at: Date())
 
@@ -210,8 +217,8 @@ struct GRDBActionRepositoryTests {
                     """, arguments: [secondMeetingID.rawValue.uuidString, workspaceID.rawValue.uuidString])
         }
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        let first = Self.makeAction(meetingID: firstMeetingID, createdBy: personID)
-        let second = Self.makeAction(meetingID: secondMeetingID, createdBy: personID)
+        let first = Self.makeAction(workspaceID: graph.workspaceID, meetingID: firstMeetingID, createdBy: personID)
+        let second = Self.makeAction(workspaceID: graph.workspaceID, meetingID: secondMeetingID, createdBy: personID)
         try await repository.insert(first, at: Date())
         try await repository.insert(second, at: Date())
 
@@ -226,7 +233,7 @@ struct GRDBActionRepositoryTests {
         let meetingID = graph.meetingID
         let personID = graph.personID
         let repository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
-        let action = Self.makeAction(meetingID: meetingID, createdBy: personID)
+        let action = Self.makeAction(workspaceID: graph.workspaceID, meetingID: meetingID, createdBy: personID)
         try await repository.insert(action, at: Date())
 
         try await repository.delete(action.actionID)

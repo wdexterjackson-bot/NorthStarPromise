@@ -24,16 +24,17 @@ struct ActiveSessionCard: View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
             HStack {
                 Circle()
-                    .fill(isPaused ? NSPColor.statusWarning : NSPColor.statusDanger)
+                    .fill(isPaused ? Palette.warn.foreground : Palette.danger.foreground)
                     .frame(width: 10, height: 10)
                     .opacity(isPaused ? 1 : 0.9)
                 Text(elapsedLabel)
                     .font(.system(.largeTitle, design: .rounded).monospacedDigit().weight(.bold))
                 Spacer()
                 if isPaused {
-                    NSPStatusBadge(symbolName: "pause.circle.fill", label: "Paused", tint: NSPColor.statusWarning)
+                    NSPStatusBadge(symbolName: "pause.circle.fill", label: "Paused", tint: Palette.warn.foreground)
                 } else {
-                    NSPStatusBadge(symbolName: "record.circle.fill", label: "Recording", tint: NSPColor.statusDanger)
+                    NSPStatusBadge(
+                        symbolName: "record.circle.fill", label: "Recording", tint: Palette.danger.foreground)
                 }
             }
 
@@ -51,8 +52,8 @@ struct ActiveSessionCard: View {
                     }
                 }
             }
-            .font(.caption)
-            .foregroundStyle(NSPColor.secondaryText)
+            .font(Typo.ui(11.5, .medium))
+            .foregroundStyle(Palette.textTertiary)
 
             HStack(spacing: NSPSpacing.medium) {
                 Button {

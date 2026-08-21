@@ -21,15 +21,35 @@ import NSPCore
 /// `.wal` and segment files themselves are written by `NSPMedia`'s
 /// `ManifestWriter`/`Segmenter` (NSP-014), not here.
 public struct MeetingContainer: Sendable {
-    public let meetingID: MeetingID
+    public let owner: ContentOwnerRef
     public let rootURL: URL
 
-    public init(appContainerURL: URL, meetingID: MeetingID) {
-        self.meetingID = meetingID
+    /// `owner`'s folder name at the top of `<AppContainer>/` — one root per
+    /// entity kind (`Meetings`/`BrainDumps`/`Notes`) rather than merging
+    /// `BrainDump`/`Note` recordings under `Meetings/`, since the whole
+    /// point of giving them their own top-level tables (docs/09-BACKLOG.md,
+    /// "rescoping the meeting-organization data model") is that a folder
+    /// under `Meetings/` should always resolve to a real `meeting` row.
+    private static func rootFolderName(for owner: ContentOwnerRef) -> String {
+        switch owner {
+        case .meeting: return "Meetings"
+        case .brainDump: return "BrainDumps"
+        case .note: return "Notes"
+        }
+    }
+
+    public init(appContainerURL: URL, owner: ContentOwnerRef) {
+        self.owner = owner
         self.rootURL =
             appContainerURL
-            .appendingPathComponent("Meetings", isDirectory: true)
-            .appendingPathComponent(meetingID.rawValue.uuidString, isDirectory: true)
+            .appendingPathComponent(Self.rootFolderName(for: owner), isDirectory: true)
+            .appendingPathComponent(ContentOwnerRefColumns.encode(owner).id, isDirectory: true)
+    }
+
+    /// Convenience for the read-only call sites (playback, import) that only
+    /// ever address a real `Meeting` — never a `BrainDump`/`Note`.
+    public init(appContainerURL: URL, meetingID: MeetingID) {
+        self.init(appContainerURL: appContainerURL, owner: .meeting(meetingID))
     }
 
     public var manifestURL: URL { rootURL.appendingPathComponent("manifest.json") }

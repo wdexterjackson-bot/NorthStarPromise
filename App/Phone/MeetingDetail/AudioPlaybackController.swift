@@ -13,6 +13,18 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
     private(set) var isPlaying = false
     private(set) var currentTimeSeconds: TimeInterval = 0
     private(set) var durationSeconds: TimeInterval = 0
+    private(set) var rate: Float = 1.0
+    /// Voice Memos' own offered speeds — every value works with
+    /// `AVAudioPlayer.enableRate`, no separate pitch-correction concern
+    /// since this app never needs music-quality time-stretching.
+    static let availableRates: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    /// When set, playback started via `play(fileURL:fromOffsetSeconds:)`
+    /// pauses itself the moment `currentTimeSeconds` reaches this point —
+    /// the Audio tab's trim preview ("hear just the selected range")
+    /// without needing a separately exported clip for playback (export is
+    /// still real, for Share — `AudioClipExporter`).
+    var stopAtSeconds: TimeInterval?
 
     private var player: AVAudioPlayer?
     private var progressTask: Task<Void, Never>?
@@ -27,6 +39,8 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         else { return }
         stop()
         newPlayer.delegate = self
+        newPlayer.enableRate = true
+        newPlayer.rate = rate
         newPlayer.prepareToPlay()
         player = newPlayer
         playingURL = fileURL
@@ -66,6 +80,23 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         currentTimeSeconds = player.currentTime
     }
 
+    /// Voice Memos' skip-15 buttons — clamped to the file's bounds rather
+    /// than letting `AVAudioPlayer.currentTime` go negative or past
+    /// `duration`, either of which is undefined behavior for that API.
+    func skip(by seconds: TimeInterval) {
+        guard let player else { return }
+        seek(toSeconds: player.currentTime + seconds)
+    }
+
+    /// `AVAudioPlayer.rate` only takes effect with `enableRate` set at load
+    /// time (already done in `load`), so this also re-applies it to
+    /// whichever player is current — cycling speed mid-playback doesn't
+    /// need a reload.
+    func setRate(_ newRate: Float) {
+        rate = newRate
+        player?.rate = newRate
+    }
+
     func stop() {
         stopProgressPolling()
         player?.stop()
@@ -74,6 +105,7 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         isPlaying = false
         currentTimeSeconds = 0
         durationSeconds = 0
+        stopAtSeconds = nil
     }
 
     /// 10fps poll to drive a scrubber — `AVAudioPlayer` has no progress
@@ -85,6 +117,12 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
             while !Task.isCancelled {
                 guard let self else { return }
                 self.currentTimeSeconds = self.player?.currentTime ?? 0
+                if let stopAtSeconds = self.stopAtSeconds, self.currentTimeSeconds >= stopAtSeconds {
+                    self.player?.pause()
+                    self.isPlaying = false
+                    self.stopProgressPolling()
+                    return
+                }
                 try? await Task.sleep(nanoseconds: 100_000_000)
             }
         }

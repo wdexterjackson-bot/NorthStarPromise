@@ -7,7 +7,7 @@ import NSPCore
 /// "makes the timeline explainable").
 public protocol TimelineEventRepository: Sendable {
     func append(_ event: TimelineEvent, at date: Date) async throws
-    func fetchAll(meetingID: MeetingID) async throws -> [TimelineEvent]
+    func fetchAll(owner: ContentOwnerRef) async throws -> [TimelineEvent]
 }
 
 public struct GRDBTimelineEventRepository: TimelineEventRepository {
@@ -26,10 +26,11 @@ public struct GRDBTimelineEventRepository: TimelineEventRepository {
 
     /// Ordered by `sampleOffset` — the only ordering key that matters
     /// (docs/03 §4), never by `wallClock`.
-    public func fetchAll(meetingID: MeetingID) async throws -> [TimelineEvent] {
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [TimelineEvent] {
+        let encoded = ContentOwnerRefColumns.encode(owner)
         let rows = try await dbWriter.read { db in
             try TimelineEventRow
-                .filter(Column("meeting_id") == meetingID.rawValue.uuidString)
+                .filter(Column("meeting_id") == encoded.id && Column("owner_kind") == encoded.kind)
                 .order(Column("sample_offset"))
                 .fetchAll(db)
         }

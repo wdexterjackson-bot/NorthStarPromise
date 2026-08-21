@@ -20,7 +20,7 @@ struct ManifestWriterTests {
 
     private static func makeManifest(meetingID: MeetingID, deviceID: DeviceID) -> Manifest {
         Manifest(
-            meetingID: meetingID, deviceID: deviceID, captureMode: .watch,
+            owner: .meeting(meetingID), deviceID: deviceID, captureMode: .watch,
             audioFormat: Manifest.AudioFormat(codec: .aacLC, sampleRate: 16000, channels: 1, bitRate: 32000),
             createdAt: Date(timeIntervalSince1970: 0))
     }

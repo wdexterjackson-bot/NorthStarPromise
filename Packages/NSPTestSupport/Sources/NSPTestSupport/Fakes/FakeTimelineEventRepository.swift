@@ -13,9 +13,9 @@ public actor FakeTimelineEventRepository: TimelineEventRepository {
         storage.append(event)
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [TimelineEvent] {
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [TimelineEvent] {
         storage
-            .filter { $0.meetingID == meetingID }
+            .filter { $0.owner == owner }
             .sorted { $0.sampleOffset < $1.sampleOffset }
     }
 }

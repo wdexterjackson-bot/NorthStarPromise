@@ -64,9 +64,20 @@ targets:
         NSCalendarsWriteOnlyAccessUsageDescription: >-
           North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in
           Settings.
+        NSCalendarsFullAccessUsageDescription: >-
+          North-Star Promise can show your calendar events so you can turn one into a scheduled recording.
         NSSpeechRecognitionUsageDescription: >-
           North-Star Promise transcribes your recordings on this device so it can generate a summary and action
           items.
+        UIAppFonts:
+          - InstrumentSerif-Regular.ttf
+          - Manrope-Regular.ttf
+          - Manrope-Medium.ttf
+          - Manrope-SemiBold.ttf
+          - Manrope-Bold.ttf
+          - Manrope-ExtraBold.ttf
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
     settings:
       base:
         TARGETED_DEVICE_FAMILY: "1,2"

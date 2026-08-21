@@ -11,7 +11,16 @@ struct SegmentRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "segment"
 
     var segmentID: String
-    var meetingID: String
+    /// Holds whichever owner's raw UUID `ownerKind` names — a `Meeting`,
+    /// `BrainDump`, or `Note` id. Column stays named `meeting_id` (no rename
+    /// migration) even though it may hold a different entity's id; see
+    /// `ownerKind`'s own doc comment.
+    var ownerID: String
+    /// `"meeting"` / `"brainDump"` / `"note"` — which table `ownerID`
+    /// actually refers to. No SQL foreign key backs `ownerID` (a single
+    /// column can't conditionally reference three tables), so integrity here
+    /// is enforced by each owner's own deletion path, not the schema.
+    var ownerKind: String
     var deviceID: String
     var sequence: Int
     var codec: String
@@ -37,7 +46,8 @@ struct SegmentRow: Codable, FetchableRecord, PersistableRecord {
     // rather than relying on that heuristic.
     enum CodingKeys: String, CodingKey {
         case segmentID = "segment_id"
-        case meetingID = "meeting_id"
+        case ownerID = "meeting_id"
+        case ownerKind = "owner_kind"
         case deviceID = "device_id"
         case sequence
         case codec
@@ -60,7 +70,9 @@ struct SegmentRow: Codable, FetchableRecord, PersistableRecord {
 
     init(segment: Segment, createdAt: Date, updatedAt: Date, rowRevision: Int, cloudRecordChangeTag: String?) {
         self.segmentID = segment.segmentID.rawValue.uuidString
-        self.meetingID = segment.meetingID.rawValue.uuidString
+        let owner = ContentOwnerRefColumns.encode(segment.owner)
+        self.ownerID = owner.id
+        self.ownerKind = owner.kind
         self.deviceID = segment.deviceID.rawValue.uuidString
         self.sequence = segment.sequence
         self.codec = segment.codec.rawValue
@@ -95,9 +107,7 @@ struct SegmentRow: Codable, FetchableRecord, PersistableRecord {
         guard let segmentUUID = UUID(uuidString: segmentID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "segment_id", value: segmentID)
         }
-        guard let meetingUUID = UUID(uuidString: meetingID) else {
-            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "meeting_id", value: meetingID)
-        }
+        let owner = try ContentOwnerRefColumns.decode(id: ownerID, kind: ownerKind, table: Self.databaseTableName)
         guard let deviceUUID = UUID(uuidString: deviceID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "device_id", value: deviceID)
         }
@@ -121,7 +131,7 @@ struct SegmentRow: Codable, FetchableRecord, PersistableRecord {
 
         return Segment(
             segmentID: SegmentID(rawValue: segmentUUID),
-            meetingID: MeetingID(rawValue: meetingUUID),
+            owner: owner,
             deviceID: DeviceID(rawValue: deviceUUID),
             sequence: sequence,
             codec: codecValue,

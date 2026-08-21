@@ -99,7 +99,7 @@ public struct Manifest: Sendable, Hashable, Codable {
     }
 
     public var version: Int
-    public var meetingID: MeetingID
+    public var owner: ContentOwnerRef
     public var deviceID: DeviceID
     public var captureMode: CaptureMode
     public var audioFormat: AudioFormat
@@ -112,7 +112,7 @@ public struct Manifest: Sendable, Hashable, Codable {
     public var integrity: Integrity
 
     public init(
-        meetingID: MeetingID,
+        owner: ContentOwnerRef,
         deviceID: DeviceID,
         captureMode: CaptureMode,
         audioFormat: AudioFormat,
@@ -126,7 +126,7 @@ public struct Manifest: Sendable, Hashable, Codable {
         version: Int = 1
     ) {
         self.version = version
-        self.meetingID = meetingID
+        self.owner = owner
         self.deviceID = deviceID
         self.captureMode = captureMode
         self.audioFormat = audioFormat

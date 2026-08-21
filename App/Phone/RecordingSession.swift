@@ -31,29 +31,40 @@ public final class RecordingSession {
         case failed(String)
     }
 
-    /// A marker dropped during this session — a real, editable `NoteBlock`
-    /// from the moment it's created (docs/07 §4, "Markers are notes, not
-    /// just timestamps"), not a bare timeline dot filled in later.
-    /// `elapsedSecondsAtDrop` is wall-clock, for the in-session list's
-    /// display only; `block.creationRange` carries the sample-accurate
-    /// anchor that's actually persisted and used for seek/evidence.
-    public struct SessionMarker: Identifiable {
-        public let block: NoteBlock
-        public let elapsedSecondsAtDrop: TimeInterval
-        public var id: NoteBlockID { block.blockID }
-    }
-
-    public private(set) var state: State = .idle
+    /// `internal(set)`, not `private(set)` — `RecordingSessionBrainDumpAndNote
+    /// .swift` (an extension in a separate file, same target) mutates this
+    /// directly, same reason `markers` below does.
+    public internal(set) var state: State = .idle
     public private(set) var elapsedSeconds: TimeInterval = 0
-    public private(set) var markers: [SessionMarker] = []
+    /// `internal(set)`, not `private(set)` — `RecordingSession+Markers.swift`
+    /// (an extension in a separate file, same target) mutates this
+    /// directly, and Swift's `private` is file-scoped, not type-scoped.
+    public internal(set) var markers: [SessionMarker] = []
     public var markerCount: Int { markers.count }
     public private(set) var meetingID: MeetingID?
-    /// The active meeting's on-disk layout — `nil` outside an active
+    /// Set instead of `meetingID` by `startBrainDump()` — `nil` any other
+    /// time, including during a `Meeting`/`Note` session. Screens that route
+    /// on "is something recording right now" (`PadRootView`'s detail-column
+    /// selection) check this alongside `meetingID`/`noteID` rather than
+    /// assuming every active session is a `Meeting`.
+    /// `internal(set)` — set from `RecordingSessionBrainDumpAndNote.swift`.
+    public internal(set) var brainDumpID: BrainDumpID?
+    /// Set instead of `meetingID` once `startStandaloneNote()`'s note has a
+    /// recording attached — `nil` before that (a standalone note with no
+    /// recording never reaches `.arming`/`.recording` at all) and any other
+    /// time a `Meeting`/`BrainDump` session is active. `internal(set)` —
+    /// set from `RecordingSessionBrainDumpAndNote.swift`.
+    public internal(set) var noteID: NoteID?
+    /// The active session's on-disk layout — `nil` outside an active
     /// session. iPad's ink canvas (`PadRecordingCanvas`) needs
     /// `inkDirectoryURL` to write `.drawing` assets; nothing else reads
     /// this today, but it's the same container `makeCaptureEngine` already
-    /// built, just retained instead of staying a local to `start()`.
-    public private(set) var meetingContainer: MeetingContainer?
+    /// built, just retained instead of staying a local to `start()`. Named
+    /// for the common case (a `Meeting`); it's the same `MeetingContainer`
+    /// type for a `BrainDump`/`Note` session too (`MeetingContainer`'s own
+    /// doc comment on `owner`). `internal(set)` — also set from
+    /// `RecordingSessionBrainDumpAndNote.swift`.
+    public internal(set) var meetingContainer: MeetingContainer?
     /// Set right after a successful `stop()` when calendar sync is on and
     /// a destination calendar is chosen — `TodayView` shows
     /// `CalendarEventConfirmationView` while this is non-nil. Never set
@@ -72,8 +83,10 @@ public final class RecordingSession {
     /// isn't what `.paused` means).
     public private(set) var inputLevel: Float = 0
 
-    private let environment: AppEnvironment
-    private var captureEngine: CaptureEngine?
+    // `internal` (not `private`) — the marker extension needs both; Swift's
+    // `private` is file-scoped, not type-scoped.
+    let environment: AppEnvironment
+    var captureEngine: CaptureEngine?
     private var elapsedTimerTask: Task<Void, Never>?
 
     public init(environment: AppEnvironment) {
@@ -107,8 +120,14 @@ public final class RecordingSession {
         }
     }
 
-    public func start() async {
-        guard state == .idle || state == .draft else { return }
+    public func start(intent: RecordingIntent = .meeting) async {
+        // A `.draft` state can now mean either a Meeting pre-brief
+        // (`prepareDraft()`) or a standalone Note (`startStandaloneNote()`)
+        // — recording into an existing Note draft isn't wired yet
+        // (`startStandaloneNote()`'s own doc comment), so this only
+        // promotes the Meeting-draft case; a Note draft falls through and
+        // no-ops rather than silently spawning an unrelated new Meeting.
+        guard state == .idle || (state == .draft && noteID == nil) else { return }
         let draftMeetingID = state == .draft ? meetingID : nil
         state = .arming
 
@@ -134,21 +153,26 @@ public final class RecordingSession {
                 let now = environment.clock.now()
                 let newMeeting = Meeting(
                     meetingID: newMeetingID, workspaceID: policy.workspaceID, title: Self.defaultMeetingTitle,
-                    captureMode: .phone, originDeviceID: environment.deviceID, startedAt: now, lifecycleState: .arming,
-                    policyID: policy.policyID, processingMode: policy.defaultProcessingMode, availability: .complete,
-                    createdAt: now, updatedAt: now)
+                    captureMode: .phone, recordingIntent: intent, originDeviceID: environment.deviceID, startedAt: now,
+                    lifecycleState: .arming, policyID: policy.policyID, processingMode: policy.defaultProcessingMode,
+                    availability: .complete, createdAt: now, updatedAt: now)
                 try await environment.meetingRepository.insert(newMeeting, at: now)
                 meeting = newMeeting
                 container = try environment.makeMeetingContainer(meetingID: newMeetingID)
             }
 
-            let engine = environment.makeCaptureEngine(meetingID: meeting.meetingID, container: container)
+            let engine = environment.makeCaptureEngine(owner: .meeting(meeting.meetingID), container: container)
             captureEngine = engine
             meetingContainer = container
 
             // Returns only after the durable write (I1) — nothing above
             // this line has said "Recording," and nothing below needed to.
-            try await engine.start()
+            // Uses `meeting.recordingIntent`, not the `intent` parameter
+            // directly, so a promoted draft (always `.meeting`, since
+            // `prepareDraft` has no intent parameter of its own) keeps its
+            // own tuning rather than whatever `start()` happened to be
+            // called with.
+            try await engine.start(micProfile: meeting.recordingIntent.microphoneProfile)
 
             var recordingMeeting = meeting
             recordingMeeting.lifecycleState = .recording
@@ -207,34 +231,6 @@ public final class RecordingSession {
         reset()
     }
 
-    /// Drops a marker and immediately creates its `NoteBlock` — empty text,
-    /// so the in-session marker list (`ActiveSessionCard`) can prompt the
-    /// user to label it right there, or it stays unlabeled until edited
-    /// from the meeting's Notes tab later. Defaults to `.action`: a marker
-    /// is almost always "flag this to follow up on," and marker text is
-    /// meant to be real input to summary/action generation, not a
-    /// second-class annotation (docs/07 §4).
-    public func addMarker() async {
-        guard state == .recording, let captureEngine, let meetingID, let selfPersonID = environment.selfPersonID
-        else { return }
-        do {
-            let sampleOffset = try await captureEngine.addMarker(kind: .actionItem)
-            let now = environment.clock.now()
-            let block = NoteBlock(
-                blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: selfPersonID, type: .action,
-                content: .text(""), creationRange: SampleRange(startSample: sampleOffset, endSample: sampleOffset),
-                privacy: .privateToAuthor,
-                opLog: [
-                    Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: .text(""))
-                ])
-            try await environment.noteBlockRepository.insert(block, at: now)
-            markers.append(SessionMarker(block: block, elapsedSecondsAtDrop: elapsedSeconds))
-        } catch {
-            // A missed marker warns, never stops capture (docs/03 §2.5's
-            // spirit) — surfacing that warning in the UI is a follow-up.
-        }
-    }
-
     /// The current live sample position, or `nil` outside `.recording`.
     /// For continuous note-taking (iPad's ruled-paper canvas) rather than
     /// a discrete marker — see `Segmenter.currentSampleOffset()`.
@@ -251,78 +247,64 @@ public final class RecordingSession {
         return await captureEngine.resolvedAudioFormat()?.sampleRate
     }
 
-    /// Labels a marker from the in-session list. Editing an existing
-    /// `NoteBlock`'s content is the same operation `NotesTab`'s composer
-    /// does post-hoc — this is just that same edit, offered at the moment
-    /// the user is most likely to remember what the marker was for.
-    public func labelMarker(_ marker: SessionMarker, text: String) async {
-        guard let index = markers.firstIndex(where: { $0.id == marker.id }), let selfPersonID = environment.selfPersonID
-        else { return }
-        var block = markers[index].block
-        let now = environment.clock.now()
-        block.content = .text(text)
-        block.opLog.append(
-            Operation(authorID: selfPersonID, timestamp: Self.millisecondTimestamp(now), content: .text(text)))
-        do {
-            try await environment.noteBlockRepository.update(block, at: now)
-            markers[index] = SessionMarker(block: block, elapsedSecondsAtDrop: markers[index].elapsedSecondsAtDrop)
-        } catch {
-            // The label just doesn't stick this time; the marker itself
-            // (and its timestamp) is unaffected — never worth failing the
-            // recording over.
-        }
-    }
-
-    public func deleteMarker(_ marker: SessionMarker) async {
-        do {
-            try await environment.noteBlockRepository.delete(marker.id)
-            markers.removeAll { $0.id == marker.id }
-        } catch {
-            // Leave it in the list rather than silently pretending the
-            // delete happened.
-        }
-    }
-
-    private static func millisecondTimestamp(_ date: Date) -> Int64 {
-        Int64(date.timeIntervalSince1970 * 1000)
-    }
-
     public func stop() async {
-        guard state == .recording || state == .paused, let captureEngine, let meetingID else { return }
+        guard state == .recording || state == .paused, let captureEngine else { return }
+        guard meetingID != nil || brainDumpID != nil else { return }
         state = .finalizing
         stopElapsedTimer()
 
         do {
             let manifest = try await captureEngine.stop()
-            if var meeting = try await environment.meetingRepository.find(meetingID) {
-                meeting.lifecycleState = .savedRaw
-                meeting.canonicalDuration = SampleDuration(
-                    sampleCount: manifest.segments.reduce(Int64(0)) { $0 + $1.sampleCount },
-                    sampleRate: manifest.audioFormat.sampleRate)
-                meeting.endedAt = environment.clock.now()
-                try await environment.meetingRepository.update(meeting, at: environment.clock.now())
-                // Title first, calendar second — never both sheets at once.
-                // The calendar event's title should reflect what the user
-                // just typed, not "Untitled meeting", so it waits for
-                // `dismissTitlePrompt` to fire it instead.
-                if meeting.title == Self.defaultMeetingTitle {
-                    pendingTitleMeeting = meeting
-                } else if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
-                    pendingCalendarMeeting = meeting
-                }
-                // Best-effort, non-blocking — the meeting is already
-                // durably saved locally (I1); sync and processing are both
-                // fast follows on top, never a condition of "saved."
-                Task { await environment.syncCoordinator.syncNow(workspaceID: meeting.workspaceID) }
-                if let selfPersonID = environment.selfPersonID {
-                    let intelligence = environment.intelligenceCoordinator
-                    Task { await intelligence.processMeeting(meetingID, selfPersonID: selfPersonID) }
-                }
+            if let meetingID {
+                try await finalizeMeeting(meetingID, manifest: manifest)
+            } else if let brainDumpID {
+                try await finalizeBrainDump(brainDumpID, manifest: manifest)
             }
             reset()
         } catch {
             state = .failed(Self.describeFailure(error))
         }
+    }
+
+    /// `stop()`'s Meeting path — title/calendar prompts, AI processing, and
+    /// a sync kick, none of which apply to a Brain Dump (`finalizeBrainDump`).
+    private func finalizeMeeting(_ meetingID: MeetingID, manifest: Manifest) async throws {
+        guard var meeting = try await environment.meetingRepository.find(meetingID) else { return }
+        meeting.lifecycleState = .savedRaw
+        meeting.canonicalDuration = SampleDuration(
+            sampleCount: manifest.segments.reduce(Int64(0)) { $0 + $1.sampleCount },
+            sampleRate: manifest.audioFormat.sampleRate)
+        meeting.endedAt = environment.clock.now()
+        try await environment.meetingRepository.update(meeting, at: environment.clock.now())
+        // Title first, calendar second — never both sheets at once. The
+        // calendar event's title should reflect what the user just typed,
+        // not "Untitled meeting", so it waits for `dismissTitlePrompt` to
+        // fire it instead.
+        //
+        // AI processing waits for the same reason when the title prompt is
+        // about to show: that's also where the user picks
+        // `PostRecordingProcessingOptions`, and starting the work before
+        // they've answered would make those toggles meaningless.
+        // `dismissTitlePrompt` fires it once they have. A meeting that's
+        // already titled (e.g. the iPad canvas's title band) never shows
+        // that prompt, so there's no later point to defer to — fire
+        // immediately here, with everything on, matching the behavior
+        // before these toggles existed.
+        if meeting.title == Self.defaultMeetingTitle {
+            pendingTitleMeeting = meeting
+        } else {
+            if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
+                pendingCalendarMeeting = meeting
+            }
+            if let selfPersonID = environment.selfPersonID {
+                let intelligence = environment.intelligenceCoordinator
+                Task { await intelligence.processMeeting(meetingID, selfPersonID: selfPersonID) }
+            }
+        }
+        // Best-effort, non-blocking — the meeting is already durably saved
+        // locally (I1); sync is a fast follow on top, never a condition of
+        // "saved."
+        Task { await environment.syncCoordinator.syncNow(workspaceID: meeting.workspaceID) }
     }
 
     /// Dismisses the post-recording calendar prompt — "Skip," or after a
@@ -333,26 +315,46 @@ public final class RecordingSession {
     }
 
     /// Dismisses the post-recording title prompt — "Skip" or after saving
-    /// a real title, either way just closes the sheet. Processing already
-    /// started independently in `stop()`, not gated on this. `meeting` is
-    /// the (possibly retitled) meeting the caller was showing, so the
-    /// calendar prompt this may chain into — held back in `stop()` for
-    /// exactly this reason — shows the real title, not the placeholder.
-    public func dismissTitlePrompt(meeting: Meeting) {
+    /// a real title, either way just closes the sheet. `meeting` is the
+    /// (possibly retitled) meeting the caller was showing, so the calendar
+    /// prompt this may chain into — held back in `stop()` for exactly this
+    /// reason — shows the real title, not the placeholder.
+    ///
+    /// This is also where AI processing actually starts for a meeting that
+    /// showed the prompt (`stop()`'s doc comment explains why it's deferred
+    /// this far) — `options` defaults to everything on so an implicit
+    /// dismissal (e.g. swiping the sheet away rather than tapping a button)
+    /// still processes the meeting rather than silently skipping it.
+    public func dismissTitlePrompt(meeting: Meeting, options: PostRecordingProcessingOptions = .init()) {
         pendingTitleMeeting = nil
         if environment.calendarSyncEnabled, environment.selectedCalendarIdentifier != nil {
             pendingCalendarMeeting = meeting
         }
+        if let selfPersonID = environment.selfPersonID {
+            let intelligence = environment.intelligenceCoordinator
+            Task { await intelligence.processMeeting(meeting.meetingID, selfPersonID: selfPersonID, options: options) }
+        }
+    }
+
+    /// The title prompt's "Delete Recording" path — clears the pending
+    /// prompt without linking a calendar event or starting AI processing;
+    /// the caller (`TodayPromptSheets`) is responsible for actually deleting
+    /// the meeting via `AppEnvironment.deleteMeeting` first.
+    public func discardPendingTitleMeeting() {
+        pendingTitleMeeting = nil
     }
 
     public static let defaultMeetingTitle = "Untitled meeting"
+    public static let defaultNoteTitle = "Untitled note"
 
     /// Also polls `captureEngine.levelMeter` for `inputLevel` — a 10fps
     /// cadence keeps the level meter feeling live without polling faster
     /// than a human eye needs (`AudioLevelMeter.currentLevel()` is a cheap
     /// lock-protected read, but there's no reason to call it more often
-    /// than the UI repaints for it).
-    private func startElapsedTimer(from startedAt: Date) {
+    /// than the UI repaints for it). Not `private` — Swift's `private` is
+    /// file-scoped, and `RecordingSessionBrainDumpAndNote.swift` calls this
+    /// too.
+    func startElapsedTimer(from startedAt: Date) {
         elapsedTimerTask?.cancel()
         elapsedTimerTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -373,6 +375,8 @@ public final class RecordingSession {
         elapsedSeconds = 0
         markers = []
         meetingID = nil
+        brainDumpID = nil
+        noteID = nil
         meetingContainer = nil
         captureEngine = nil
         inputLevel = 0

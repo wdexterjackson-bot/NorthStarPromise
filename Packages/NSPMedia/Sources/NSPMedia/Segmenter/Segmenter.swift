@@ -41,7 +41,7 @@ public actor Segmenter {
     private let segmentRepository: any SegmentRepository
     private let timelineEventRepository: any TimelineEventRepository
     private let clock: any Clock
-    private let meetingID: MeetingID
+    private let owner: ContentOwnerRef
     private let deviceID: DeviceID
     private let audioFormat: SegmentAudioFormat
     private let rotationSamples: Int64
@@ -57,7 +57,7 @@ public actor Segmenter {
         container: MeetingContainer, audioEncoder: some SegmentAudioEncoder,
         segmentFileSystem: some SegmentFileSystem, manifestWriter: ManifestWriter,
         segmentRepository: some SegmentRepository, timelineEventRepository: some TimelineEventRepository,
-        clock: some Clock, meetingID: MeetingID, deviceID: DeviceID,
+        clock: some Clock, owner: ContentOwnerRef, deviceID: DeviceID,
         audioFormat: SegmentAudioFormat = .iOSDefault, rotationSeconds: Double = 60
     ) {
         self.container = container
@@ -67,7 +67,7 @@ public actor Segmenter {
         self.segmentRepository = segmentRepository
         self.timelineEventRepository = timelineEventRepository
         self.clock = clock
-        self.meetingID = meetingID
+        self.owner = owner
         self.deviceID = deviceID
         self.audioFormat = audioFormat
         self.rotationSamples = Int64(rotationSeconds * Double(audioFormat.sampleRate))
@@ -178,7 +178,7 @@ public actor Segmenter {
         try await recordTimelineEvent(.stop)
 
         var manifest = Manifest(
-            meetingID: meetingID, deviceID: deviceID, captureMode: .phone,
+            owner: owner, deviceID: deviceID, captureMode: .phone,
             audioFormat: Manifest.AudioFormat(
                 codec: audioFormat.codec, sampleRate: audioFormat.sampleRate, channels: audioFormat.channels,
                 bitRate: audioFormat.bitRate),
@@ -237,7 +237,7 @@ public actor Segmenter {
 
         // 6. Durable locally before the outbox may see it (I2).
         let segment = Segment(
-            segmentID: segmentID, meetingID: meetingID, deviceID: deviceID, sequence: sequence,
+            segmentID: segmentID, owner: owner, deviceID: deviceID, sequence: sequence,
             codec: audioFormat.codec, sampleRate: audioFormat.sampleRate, channels: audioFormat.channels,
             bitRate: audioFormat.bitRate, startSample: startSample, sampleCount: sampleCount, sha256: sha256,
             localURL: finalURL, transferState: .local)
@@ -269,7 +269,7 @@ public actor Segmenter {
         let sampleOffset = cumulativeSampleCount + samplesInCurrentSegment
         let payload: JSONValue? = gapSamples.map { .object(["gapSamples": .number(Double($0))]) }
         let event = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: deviceID, type: type,
+            eventID: TimelineEventID(rawValue: UUID()), owner: owner, deviceID: deviceID, type: type,
             sampleOffset: sampleOffset, wallClock: clock.now(), payload: payload)
         try await manifestWriter.append(
             .timelineEvent(

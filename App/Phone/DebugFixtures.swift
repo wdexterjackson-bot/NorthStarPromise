@@ -28,8 +28,8 @@
 
             if let selfPersonID = environment.selfPersonID {
                 let actionSamples = makeActionSamples(
-                    now: now, productSyncID: samples[0].meetingID, oneOnOneID: samples[1].meetingID,
-                    selfPersonID: selfPersonID)
+                    now: now, workspaceID: policy.workspaceID, productSyncID: samples[0].meetingID,
+                    oneOnOneID: samples[1].meetingID, selfPersonID: selfPersonID)
                 for action in actionSamples {
                     try? await environment.actionRepository.insert(action, at: now)
                 }
@@ -69,21 +69,22 @@
         }
 
         private static func makeActionSamples(
-            now: Date, productSyncID: MeetingID, oneOnOneID: MeetingID, selfPersonID: PersonID
+            now: Date, workspaceID: WorkspaceID, productSyncID: MeetingID, oneOnOneID: MeetingID,
+            selfPersonID: PersonID
         ) -> [Action] {
             [
                 Action(
-                    actionID: ActionID(rawValue: UUID()), meetingID: productSyncID,
+                    actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: productSyncID,
                     text: "Send updated roadmap slides to the team", owner: .explicit(selfPersonID),
                     date: .explicit(now.addingTimeInterval(-3600 * 20)), status: .confirmed, evidence: [],
                     createdBy: selfPersonID),
                 Action(
-                    actionID: ActionID(rawValue: UUID()), meetingID: productSyncID,
+                    actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: productSyncID,
                     text: "Follow up with Legal on the contract redline", owner: .unresolved,
                     date: .inferred(now.addingTimeInterval(3600 * 48)), status: .proposed, evidence: [],
                     createdBy: selfPersonID),
                 Action(
-                    actionID: ActionID(rawValue: UUID()), meetingID: oneOnOneID,
+                    actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: oneOnOneID,
                     text: "Draft Priya's Q3 goals doc", owner: .explicit(selfPersonID), date: .unresolved,
                     status: .inProgress, evidence: [], createdBy: selfPersonID),
             ]

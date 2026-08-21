@@ -10,9 +10,11 @@ public protocol ActionRepository: Sendable {
     func update(_ action: Action, at date: Date) async throws
     func find(_ id: ActionID) async throws -> Action?
     func fetchAll(meetingID: MeetingID) async throws -> [Action]
-    /// Every action across every meeting in the workspace — what the
-    /// global Actions dashboard (docs/07 §4) groups by status. Joins
-    /// through `meeting` since `action_item` only carries a `meeting_id`.
+    /// Every action in the workspace, meeting-tied or freestanding — what
+    /// the global Actions dashboard (docs/07 §4) groups by status.
+    /// `action_item.workspace_id` is its own real column (not derived via
+    /// a `meeting` join) precisely so a freestanding action still surfaces
+    /// here.
     func fetchAll(workspaceID: WorkspaceID) async throws -> [Action]
     func delete(_ id: ActionID) async throws
 }
@@ -29,8 +31,7 @@ public struct GRDBActionRepository: ActionRepository {
         try await dbWriter.write { db in
             try row.insert(db)
             try Self.replaceAuditTrail(action.auditTrail, actionID: row.actionID, in: db)
-            try EvidenceSpanPersistence.sync(
-                db, owner: .action(row.actionID), meetingID: row.meetingID, spans: action.evidence)
+            try Self.syncEvidence(db, actionID: row.actionID, meetingID: row.meetingID, spans: action.evidence)
         }
     }
 
@@ -44,8 +45,22 @@ public struct GRDBActionRepository: ActionRepository {
                 action: action, createdAt: existing.createdAt, updatedAt: date, rowRevision: existing.rowRevision + 1)
             try updated.update(db)
             try Self.replaceAuditTrail(action.auditTrail, actionID: actionID, in: db)
-            try EvidenceSpanPersistence.sync(
-                db, owner: .action(actionID), meetingID: updated.meetingID, spans: action.evidence)
+            try Self.syncEvidence(db, actionID: actionID, meetingID: updated.meetingID, spans: action.evidence)
+        }
+    }
+
+    /// A span always needs a real meeting's transcript to quote from
+    /// (Invariant I4), so a freestanding action (`meetingID == nil`) can
+    /// only ever clear its evidence, never insert any — `evidence` should
+    /// already be empty for one, but this makes that the enforced outcome
+    /// rather than an assumption.
+    private static func syncEvidence(
+        _ db: Database, actionID: String, meetingID: String?, spans: [EvidenceSpan]
+    ) throws {
+        if let meetingID {
+            try EvidenceSpanPersistence.sync(db, owner: .action(actionID), meetingID: meetingID, spans: spans)
+        } else {
+            try EvidenceSpanPersistence.clear(db, owner: .action(actionID))
         }
     }
 
@@ -75,14 +90,11 @@ public struct GRDBActionRepository: ActionRepository {
 
     public func fetchAll(workspaceID: WorkspaceID) async throws -> [Action] {
         try await dbWriter.read { db in
-            let rows = try ActionRow.fetchAll(
-                db,
-                sql: """
-                    SELECT action_item.* FROM action_item
-                    JOIN meeting ON meeting.meeting_id = action_item.meeting_id
-                    WHERE meeting.workspace_id = ?
-                    ORDER BY action_item.created_at
-                    """, arguments: [workspaceID.rawValue.uuidString])
+            let rows =
+                try ActionRow
+                .filter(Column("workspace_id") == workspaceID.rawValue.uuidString)
+                .order(Column("created_at"))
+                .fetchAll(db)
             return try rows.map { row in
                 try row.asDomain(
                     evidence: try EvidenceSpanPersistence.fetch(db, owner: .action(row.actionID)),

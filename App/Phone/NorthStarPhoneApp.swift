@@ -1,7 +1,11 @@
+import AVFAudio
+import NSPCore
 import SwiftUI
+import UserNotifications
 
 @main
 struct NorthStarPhoneApp: App {
+    @UIApplicationDelegateAdaptor private var appDelegate: NorthStarAppDelegate
     @State private var environment: AppEnvironment?
     @State private var launchError: String?
     @Environment(\.scenePhase) private var scenePhase
@@ -35,8 +39,19 @@ struct NorthStarPhoneApp: App {
                         await DebugFixtures.seedIfNeeded(environment: newEnvironment)
                     #endif
                     environment = newEnvironment
+                    appDelegate.attach(newEnvironment.scheduledRecordingCoordinator)
                     if let workspaceID = newEnvironment.defaultPolicy?.workspaceID {
                         Task { await newEnvironment.syncCoordinator.syncNow(workspaceID: workspaceID) }
+                        if newEnvironment.featureFlagProvider.isEnabled(.scheduledRecording) {
+                            ScheduledRecordingNotificationScheduler.registerCategory()
+                            Task {
+                                await newEnvironment.scheduledRecordingCoordinator.reconcile(workspaceID: workspaceID)
+                            }
+                        }
+                        Task {
+                            await Self.requestLaunchPermissionsIfNeeded(
+                                environment: newEnvironment, workspaceID: workspaceID)
+                        }
                     }
                 } catch {
                     launchError = "\(error)"
@@ -52,5 +67,37 @@ struct NorthStarPhoneApp: App {
             }
             Task { await environment.syncCoordinator.syncNow(workspaceID: workspaceID) }
         }
+    }
+
+    private static let openActionStatuses: Set<ActionStatus> = [.proposed, .confirmed, .sent, .inProgress]
+
+    /// Asks for microphone access unconditionally — every recording needs
+    /// it, and asking here means the first "Start Recording" tap never
+    /// stalls on a system prompt — and for notification access only when
+    /// the user already has something a notification would serve: a
+    /// pending scheduled recording, or an open action item. A brand-new
+    /// workspace with neither isn't asked for a permission with nothing
+    /// behind it yet. Both checks read `.undetermined`/`.notDetermined`
+    /// first, so a previously denied permission is never re-prompted
+    /// (iOS wouldn't show a system dialog for it anyway — only Settings
+    /// can change that). Runs once, inside the launch `.task`'s one-time
+    /// body, so neither can re-prompt again until the app relaunches.
+    private static func requestLaunchPermissionsIfNeeded(environment: AppEnvironment, workspaceID: WorkspaceID) async {
+        if AVAudioApplication.shared.recordPermission == .undetermined {
+            _ = await AVAudioApplication.requestRecordPermission()
+        }
+
+        let notificationSettings = await UNUserNotificationCenter.current().notificationSettings()
+        guard notificationSettings.authorizationStatus == .notDetermined else { return }
+
+        let hasPendingSchedule =
+            !((try? await environment.scheduledRecordingRepository.fetchPending(
+                workspaceID: workspaceID)) ?? []).isEmpty
+        let hasOpenAction =
+            (try? await environment.actionRepository.fetchAll(workspaceID: workspaceID))?
+            .contains { Self.openActionStatuses.contains($0.status) } ?? false
+
+        guard hasPendingSchedule || hasOpenAction else { return }
+        _ = await ScheduledRecordingNotificationScheduler().requestAuthorization()
     }
 }

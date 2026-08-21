@@ -13,6 +13,9 @@ struct TranscriptTab: View {
     let environment: AppEnvironment
     let playback: AudioPlaybackController
     let compositeAudioURL: URL?
+    /// Set when arriving from an Ask citation tap (`AskView`'s doc
+    /// comment) — seeks and scrolls to this turn once turns load.
+    var initialSeekTurnID: TranscriptTurnID?
 
     @State private var turns: [TranscriptTurn] = []
     @State private var loadError: String?
@@ -20,14 +23,25 @@ struct TranscriptTab: View {
     var body: some View {
         VStack(alignment: .leading, spacing: NSPSpacing.large) {
             if let loadError {
-                Text(loadError).font(.caption).foregroundStyle(NSPColor.secondaryText)
+                Text(loadError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.textTertiary)
             } else if turns.isEmpty {
                 ContentUnavailableView(
                     "No transcript yet", systemImage: "text.bubble",
                     description: Text("Transcription runs after processing completes."))
             } else {
-                ForEach(turns) { turn in
-                    TranscriptTurnRow(turn: turn) { seek(to: turn) }
+                ScrollViewReader { scrollProxy in
+                    ForEach(turns) { turn in
+                        TranscriptTurnRow(turn: turn, isHighlighted: turn.turnID == initialSeekTurnID) {
+                            seek(to: turn)
+                        }
+                        .id(turn.turnID)
+                    }
+                    .task {
+                        guard let initialSeekTurnID, let target = turns.first(where: { $0.turnID == initialSeekTurnID })
+                        else { return }
+                        seek(to: target)
+                        withAnimation { scrollProxy.scrollTo(initialSeekTurnID, anchor: .center) }
+                    }
                 }
             }
         }
@@ -42,7 +56,7 @@ struct TranscriptTab: View {
 
     private func load() async {
         do {
-            turns = try await environment.transcriptTurnRepository.fetchAll(meetingID: meeting.meetingID)
+            turns = try await environment.transcriptTurnRepository.fetchAll(owner: .meeting(meeting.meetingID))
         } catch {
             loadError = "\(error)"
         }
@@ -51,6 +65,10 @@ struct TranscriptTab: View {
 
 private struct TranscriptTurnRow: View {
     let turn: TranscriptTurn
+    /// Set only for the turn an Ask citation tap landed on
+    /// (`TranscriptTab`'s doc comment) — a brief visual anchor so the user
+    /// can tell which row they were sent to.
+    var isHighlighted: Bool = false
     let onSeek: () -> Void
 
     // Speaker attribution isn't built yet (diarization is out of this
@@ -62,11 +80,17 @@ private struct TranscriptTurnRow: View {
     var body: some View {
         Button(action: onSeek) {
             Text(text)
-                .font(.body)
-                .foregroundStyle(NSPColor.primaryText)
+                .font(Typo.ui(14, .medium))
+                .foregroundStyle(Palette.textPrimary)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .nspCard()
+                .overlay {
+                    if isHighlighted {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Palette.accent.foreground, lineWidth: 2)
+                    }
+                }
         }
         .buttonStyle(.plain)
     }

@@ -37,7 +37,7 @@ struct GRDBSegmentRepositoryTests {
     private static func makeSegment(meetingID: MeetingID, sequence: Int) -> Segment {
         Segment(
             segmentID: SegmentID(rawValue: UUID()),
-            meetingID: meetingID,
+            owner: .meeting(meetingID),
             deviceID: DeviceID(rawValue: UUID()),
             sequence: sequence,
             codec: .aacLC,
@@ -114,7 +114,7 @@ struct GRDBSegmentRepositoryTests {
             try await repository.insert(Self.makeSegment(meetingID: meetingID, sequence: sequence), at: Date())
         }
 
-        let all = try await repository.fetchAll(meetingID: meetingID)
+        let all = try await repository.fetchAll(owner: .meeting(meetingID))
         #expect(all.map(\.sequence) == [0, 1, 2])
     }
 

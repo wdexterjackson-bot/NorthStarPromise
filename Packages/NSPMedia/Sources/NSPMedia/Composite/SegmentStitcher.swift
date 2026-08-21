@@ -91,49 +91,65 @@ public struct SegmentStitcher: Sendable {
         }
     }
 
+    /// Reads each segment's decoded PCM straight through into one AAC
+    /// output file via `AVAudioFile`, rather than `AVMutableComposition` +
+    /// `AVAssetExportSession` — deliberately: the export-session pipeline
+    /// depends on hardware/codec support that Simulator (and some real
+    /// configurations) doesn't reliably provide, and fails there with an
+    /// opaque `AVFoundationErrorDomain` code 11800 that carries no
+    /// actionable detail. Reading/writing PCM buffers directly has no such
+    /// dependency and is the same technique `AVAudioFileSegmentEncoder`
+    /// already uses to write a segment in the first place.
     private static func export(_ segments: [Segment], to url: URL) async throws {
         #if os(watchOS)
-            // `AVAssetExportSession`/its presets are `API_UNAVAILABLE(watchos)`
-            // — stitched playback is phone/iPad-only UI (`docs/07 §4`), so
-            // this is a real, typed "not on this platform" rather than a gap.
+            // `AVAudioFile`'s compressed-write path is available on
+            // watchOS too, but stitched playback is phone/iPad-only UI
+            // (`docs/07 §4`) — no caller on watchOS ever reaches this.
             throw SegmentStitcherError.exportFailed("Composite audio isn't supported on watchOS")
         #else
-            let composition = AVMutableComposition()
-            guard
-                let track = composition.addMutableTrack(
-                    withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid)
-            else {
-                throw SegmentStitcherError.compositionFailed("Couldn't create a composition track")
-            }
-
-            var cursor = CMTime.zero
-            for segment in segments {
-                guard let localURL = segment.localURL else {
-                    throw SegmentStitcherError.segmentUnavailableLocally(segment.segmentID)
-                }
-                let asset = AVURLAsset(url: localURL)
-                guard let assetTrack = try await asset.loadTracks(withMediaType: .audio).first else {
-                    throw SegmentStitcherError.compositionFailed("Segment \(segment.sequence) has no audio track")
-                }
-                let duration = try await asset.load(.duration)
-                do {
-                    try track.insertTimeRange(CMTimeRange(start: .zero, duration: duration), of: assetTrack, at: cursor)
-                } catch {
-                    throw SegmentStitcherError.compositionFailed("\(error)")
-                }
-                cursor = CMTimeAdd(cursor, duration)
-            }
-
-            guard
-                let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetAppleM4A)
-            else {
-                throw SegmentStitcherError.exportFailed("Couldn't create an export session")
-            }
             do {
-                try await exportSession.export(to: url, as: .m4a)
+                let sourceFiles = try segments.map { segment -> AVAudioFile in
+                    guard let localURL = segment.localURL else {
+                        throw SegmentStitcherError.segmentUnavailableLocally(segment.segmentID)
+                    }
+                    return try AVAudioFile(forReading: localURL)
+                }
+                guard let firstFile = sourceFiles.first else { throw SegmentStitcherError.noSegments }
+
+                let outputSettings: [String: Any] = [
+                    AVFormatIDKey: kAudioFormatMPEG4AAC,
+                    AVSampleRateKey: firstFile.fileFormat.sampleRate,
+                    AVNumberOfChannelsKey: firstFile.fileFormat.channelCount,
+                ]
+                let outputFile = try AVAudioFile(
+                    forWriting: url, settings: outputSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
+
+                for sourceFile in sourceFiles {
+                    try Self.copy(sourceFile, into: outputFile)
+                }
+            } catch let error as SegmentStitcherError {
+                throw error
             } catch {
                 throw SegmentStitcherError.exportFailed("\(error)")
             }
         #endif
     }
+
+    #if !os(watchOS)
+        private static let copyBufferFrameCapacity: AVAudioFrameCount = 32768
+
+        private static func copy(_ sourceFile: AVAudioFile, into outputFile: AVAudioFile) throws {
+            guard
+                let buffer = AVAudioPCMBuffer(
+                    pcmFormat: sourceFile.processingFormat, frameCapacity: Self.copyBufferFrameCapacity)
+            else {
+                throw SegmentStitcherError.compositionFailed("Couldn't allocate a read buffer")
+            }
+            while sourceFile.framePosition < sourceFile.length {
+                try sourceFile.read(into: buffer)
+                guard buffer.frameLength > 0 else { break }
+                try outputFile.write(from: buffer)
+            }
+        }
+    #endif
 }

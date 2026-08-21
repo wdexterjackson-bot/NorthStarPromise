@@ -73,7 +73,7 @@ struct SegmentStitcherTests {
         fixture: Fixture, sequence: Int, startSample: Int64, deviceID: DeviceID? = nil
     ) -> Segment {
         Segment(
-            segmentID: SegmentID(rawValue: UUID()), meetingID: fixture.meetingID,
+            segmentID: SegmentID(rawValue: UUID()), owner: .meeting(fixture.meetingID),
             deviceID: deviceID ?? fixture.deviceID, sequence: sequence, codec: format.codec,
             sampleRate: format.sampleRate, channels: format.channels, bitRate: format.bitRate,
             startSample: startSample, sampleCount: Int64(0.3 * Double(format.sampleRate)))

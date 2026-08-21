@@ -11,7 +11,8 @@ struct TranscriptTurnRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "transcript_turn"
 
     var turnID: String
-    var meetingID: String
+    var ownerID: String
+    var ownerKind: String
     var revision: Int
     var isProvisional: Bool
     var speakerClusterID: String?
@@ -25,7 +26,8 @@ struct TranscriptTurnRow: Codable, FetchableRecord, PersistableRecord {
 
     enum CodingKeys: String, CodingKey {
         case turnID = "turn_id"
-        case meetingID = "meeting_id"
+        case ownerID = "meeting_id"
+        case ownerKind = "owner_kind"
         case revision
         case isProvisional = "is_provisional"
         case speakerClusterID = "speaker_cluster_id"
@@ -40,7 +42,9 @@ struct TranscriptTurnRow: Codable, FetchableRecord, PersistableRecord {
 
     init(turn: TranscriptTurn, createdAt: Date, updatedAt: Date, rowRevision: Int, cloudRecordChangeTag: String?) {
         self.turnID = turn.turnID.rawValue.uuidString
-        self.meetingID = turn.meetingID.rawValue.uuidString
+        let owner = ContentOwnerRefColumns.encode(turn.owner)
+        self.ownerID = owner.id
+        self.ownerKind = owner.kind
         self.revision = turn.revision
         self.isProvisional = turn.isProvisional
         self.speakerClusterID = turn.speakerClusterID
@@ -66,9 +70,7 @@ struct TranscriptTurnRow: Codable, FetchableRecord, PersistableRecord {
         guard let turnUUID = UUID(uuidString: turnID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "turn_id", value: turnID)
         }
-        guard let meetingUUID = UUID(uuidString: meetingID) else {
-            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "meeting_id", value: meetingID)
-        }
+        let owner = try ContentOwnerRefColumns.decode(id: ownerID, kind: ownerKind, table: Self.databaseTableName)
         let resolvedPersonID: PersonID? =
             try personID.map {
                 guard let uuid = UUID(uuidString: $0) else {
@@ -86,7 +88,7 @@ struct TranscriptTurnRow: Codable, FetchableRecord, PersistableRecord {
         }
 
         return TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: turnUUID), meetingID: MeetingID(rawValue: meetingUUID),
+            turnID: TranscriptTurnID(rawValue: turnUUID), owner: owner,
             revision: revision, isProvisional: isProvisional, speakerClusterID: speakerClusterID,
             personID: resolvedPersonID, tokens: tokens, languageSpans: languageSpans, segmentRefs: segmentRefs,
             editState: resolvedEditState)

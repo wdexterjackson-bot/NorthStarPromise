@@ -34,13 +34,13 @@ struct FakeRepositoriesTests {
         let meetingID = MeetingID(rawValue: UUID())
         for sequence in [2, 0, 1] {
             let segment = Segment(
-                segmentID: SegmentID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
-                sequence: sequence, codec: .aacLC, sampleRate: 16_000, channels: 1, bitRate: 32_000,
-                startSample: 0, sampleCount: 720_000)
+                segmentID: SegmentID(rawValue: UUID()), owner: .meeting(meetingID),
+                deviceID: DeviceID(rawValue: UUID()), sequence: sequence, codec: .aacLC,
+                sampleRate: 16_000, channels: 1, bitRate: 32_000, startSample: 0, sampleCount: 720_000)
             try await repository.insert(segment, at: Date())
         }
 
-        let all = try await repository.fetchAll(meetingID: meetingID)
+        let all = try await repository.fetchAll(owner: .meeting(meetingID))
         #expect(all.map(\.sequence) == [0, 1, 2])
     }
 
@@ -48,16 +48,18 @@ struct FakeRepositoriesTests {
         let repository = FakeTimelineEventRepository()
         let meetingID = MeetingID(rawValue: UUID())
         let later = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .stop, sampleOffset: 5_000, wallClock: Date())
         let earlier = TimelineEvent(
-            eventID: TimelineEventID(rawValue: UUID()), meetingID: meetingID, deviceID: DeviceID(rawValue: UUID()),
+            eventID: TimelineEventID(rawValue: UUID()), owner: .meeting(meetingID),
+            deviceID: DeviceID(rawValue: UUID()),
             type: .start, sampleOffset: 0, wallClock: Date())
 
         try await repository.append(later, at: Date())
         try await repository.append(earlier, at: Date())
 
-        let all = try await repository.fetchAll(meetingID: meetingID)
+        let all = try await repository.fetchAll(owner: .meeting(meetingID))
         #expect(all.map(\.eventID) == [earlier.eventID, later.eventID])
     }
 
@@ -65,7 +67,7 @@ struct FakeRepositoriesTests {
         let repository = FakeNoteBlockRepository()
         let meetingID = MeetingID(rawValue: UUID())
         let block = NoteBlock(
-            blockID: NoteBlockID(rawValue: UUID()), meetingID: meetingID, authorID: PersonID(rawValue: UUID()),
+            blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(meetingID), authorID: PersonID(rawValue: UUID()),
             type: .richText, content: .text("hello"), creationRange: SampleRange(startSample: 0, endSample: 1000))
 
         try await repository.insert(block, at: Date())
@@ -80,7 +82,7 @@ struct FakeRepositoriesTests {
     @Test func test_fakeNoteBlockRepository_updateMissingRow_throws() async throws {
         let repository = FakeNoteBlockRepository()
         let block = NoteBlock(
-            blockID: NoteBlockID(rawValue: UUID()), meetingID: MeetingID(rawValue: UUID()),
+            blockID: NoteBlockID(rawValue: UUID()), owner: .meeting(MeetingID(rawValue: UUID())),
             authorID: PersonID(rawValue: UUID()), type: .richText, content: .text("hello"),
             creationRange: SampleRange(startSample: 0, endSample: 1000))
 

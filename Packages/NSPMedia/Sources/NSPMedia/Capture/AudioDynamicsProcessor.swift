@@ -100,7 +100,10 @@ public final class AudioDynamicsProcessor: @unchecked Sendable {
     /// large, which is exactly backwards for noise.
     private func desiredGain(forRMS rms: Float) -> Float {
         let rmsDecibels = 20 * log10(max(rms, 1e-9))
-        guard rmsDecibels < expanderThresholdDecibels else {
+        guard
+            RMSNoiseClassifier.isLikelyNoise(
+                rmsDecibels: rmsDecibels, expanderThresholdDecibels: expanderThresholdDecibels)
+        else {
             return min(max(targetLinear / max(rms, 1e-9), minGainLinear), maxGainLinear)
         }
 

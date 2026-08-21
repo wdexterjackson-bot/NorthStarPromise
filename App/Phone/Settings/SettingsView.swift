@@ -18,13 +18,15 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                appearanceSection
+
                 Section("Processing") {
                     settingsRow(symbol: "cpu", tint: .blue, title: "Default processing mode") {
                         Text(environment.defaultPolicy?.defaultProcessingMode.rawValue ?? "—")
-                            .foregroundStyle(NSPColor.secondaryText)
+                            .foregroundStyle(Palette.textTertiary)
                     }
                     settingsRow(symbol: "sparkles", tint: .indigo, title: "On-device availability") {
-                        Text("Not checked yet").foregroundStyle(NSPColor.secondaryText)
+                        Text("Not checked yet").foregroundStyle(Palette.textTertiary)
                     }
                 }
 
@@ -51,12 +53,30 @@ struct SettingsView: View {
                 Section("About") {
                     settingsRow(symbol: "info.circle.fill", tint: .gray, title: "Device ID") {
                         Text(environment.deviceID.rawValue.uuidString.prefix(8))
-                            .foregroundStyle(NSPColor.secondaryText)
+                            .foregroundStyle(Palette.textTertiary)
                             .monospaced()
                     }
                 }
             }
             .navigationTitle("Settings")
+        }
+    }
+
+    /// System / Light / Dark override (`AppEnvironment.appearanceMode`'s own
+    /// doc comment) — the mockups show iPhone in dark and iPad in light,
+    /// but that's a presentation choice, not a platform rule
+    /// (`DASHBOARD_SPEC.md` §2.1: "ship both themes on both devices").
+    private var appearanceSection: some View {
+        Section("Appearance") {
+            Picker(
+                "Theme",
+                selection: Binding(
+                    get: { environment.appearanceMode }, set: { environment.appearanceMode = $0 })
+            ) {
+                ForEach(AppearanceMode.allCases, id: \.self) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
         }
     }
 
@@ -83,8 +103,8 @@ struct SettingsView: View {
                     }
                 } else if calendars.isEmpty {
                     Text("No writable calendars found.")
-                        .font(.caption)
-                        .foregroundStyle(NSPColor.secondaryText)
+                        .font(Typo.ui(11.5, .medium))
+                        .foregroundStyle(Palette.textTertiary)
                 } else {
                     Picker(
                         "Calendar",
@@ -101,16 +121,16 @@ struct SettingsView: View {
 
             if calendarAccessDenied {
                 Text("Calendar access was denied. Enable it for North-Star Promise in Settings → Privacy & Security.")
-                    .font(.caption)
-                    .foregroundStyle(NSPColor.statusDanger)
+                    .font(Typo.ui(11.5, .medium))
+                    .foregroundStyle(Palette.danger.foreground)
             }
 
             Text(
                 "Adds an event to your chosen calendar after each recording ends. You always confirm the exact "
                     + "time before it's created."
             )
-            .font(.caption)
-            .foregroundStyle(NSPColor.secondaryText)
+            .font(Typo.ui(11.5, .medium))
+            .foregroundStyle(Palette.textTertiary)
         }
         .task {
             if environment.calendarSyncEnabled { await loadCalendars() }
@@ -165,8 +185,8 @@ struct SettingsView: View {
                 "Recordings made while this is on are pushed to your private iCloud, so they show up on your "
                     + "other devices signed into the same Apple ID. Meetings already recorded aren't affected."
             )
-            .font(.caption)
-            .foregroundStyle(NSPColor.secondaryText)
+            .font(Typo.ui(11.5, .medium))
+            .foregroundStyle(Palette.textTertiary)
         }
     }
 
@@ -175,7 +195,7 @@ struct SettingsView: View {
         switch environment.syncCoordinator.status {
         case .idle:
             settingsRow(symbol: "icloud", tint: .blue, title: "Status") {
-                Text("Idle").foregroundStyle(NSPColor.secondaryText)
+                Text("Idle").foregroundStyle(Palette.textTertiary)
             }
         case .syncing:
             settingsRow(symbol: "icloud", tint: .blue, title: "Status") {
@@ -184,16 +204,16 @@ struct SettingsView: View {
         case .succeeded(let date):
             settingsRow(symbol: "checkmark.icloud", tint: .green, title: "Status") {
                 Text("Last synced \(date.formatted(date: .omitted, time: .shortened))")
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .foregroundStyle(Palette.textTertiary)
             }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 2) {
                 settingsRow(symbol: "exclamationmark.icloud", tint: .orange, title: "Status") {
-                    Text("Couldn't sync").foregroundStyle(NSPColor.statusDanger)
+                    Text("Couldn't sync").foregroundStyle(Palette.danger.foreground)
                 }
                 Text(message)
-                    .font(.caption2)
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .font(Typo.ui(10.5, .medium))
+                    .foregroundStyle(Palette.textTertiary)
             }
         }
     }
@@ -228,8 +248,8 @@ struct SettingsView: View {
             HStack(alignment: .top, spacing: NSPSpacing.medium) {
                 NSPIconBadge(symbolName: symbol, tint: tint)
                 Text(message)
-                    .font(.caption)
-                    .foregroundStyle(NSPColor.secondaryText)
+                    .font(Typo.ui(11.5, .medium))
+                    .foregroundStyle(Palette.textTertiary)
             }
             .padding(.vertical, 2)
         }

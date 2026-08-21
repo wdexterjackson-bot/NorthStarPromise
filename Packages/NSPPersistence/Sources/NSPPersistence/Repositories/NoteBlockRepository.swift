@@ -8,7 +8,7 @@ public protocol NoteBlockRepository: Sendable {
     func insert(_ block: NoteBlock, at date: Date) async throws
     func update(_ block: NoteBlock, at date: Date) async throws
     func find(_ id: NoteBlockID) async throws -> NoteBlock?
-    func fetchAll(meetingID: MeetingID) async throws -> [NoteBlock]
+    func fetchAll(owner: ContentOwnerRef) async throws -> [NoteBlock]
     func delete(_ id: NoteBlockID) async throws
 }
 
@@ -47,11 +47,12 @@ public struct GRDBNoteBlockRepository: NoteBlockRepository {
         }
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [NoteBlock] {
-        try await dbWriter.read { db in
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [NoteBlock] {
+        let encoded = ContentOwnerRefColumns.encode(owner)
+        return try await dbWriter.read { db in
             let rows =
                 try NoteBlockRow
-                .filter(Column("meeting_id") == meetingID.rawValue.uuidString)
+                .filter(Column("meeting_id") == encoded.id && Column("owner_kind") == encoded.kind)
                 .fetchAll(db)
             return try rows.map { row in try row.asDomain(opLog: try Self.fetchOpLog(blockID: row.blockID, in: db)) }
         }

@@ -1,4 +1,5 @@
 import Foundation
+import NSPCore
 
 /// Typed, exhaustive error enum for capture backends (docs/11 §2).
 public enum CaptureBackendError: Error, Sendable, Hashable {
@@ -23,8 +24,11 @@ public protocol CaptureBackend: Sendable {
     /// silently activating a session that will only ever capture silence.
     /// The *actual* format capture ends up in is read back afterward via
     /// `inputFormat()` — hardware doesn't always grant exactly what was
-    /// requested.
-    func activateSession(preferredSampleRate: Double) async throws
+    /// requested. `micProfile` is a best-effort polar-pattern preference
+    /// (`RecordingIntent.microphoneProfile`'s doc comment) — real support
+    /// varies by hardware/OS, and this never blocks recording when the
+    /// preferred tuning isn't available.
+    func activateSession(preferredSampleRate: Double, micProfile: MicrophoneProfile) async throws
     func deactivateSession() throws
 
     /// The input format now in effect, after `activateSession`. Segments

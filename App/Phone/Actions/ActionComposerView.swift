@@ -40,7 +40,7 @@ struct ActionComposerView: View {
                     }
                 }
                 if let saveError {
-                    Text(saveError).font(.caption).foregroundStyle(NSPColor.statusDanger)
+                    Text(saveError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
                 }
             }
             .navigationTitle("New Action")
@@ -58,7 +58,8 @@ struct ActionComposerView: View {
     }
 
     private func save() async {
-        guard let selfPersonID = environment.selfPersonID else {
+        guard let selfPersonID = environment.selfPersonID, let workspaceID = environment.defaultPolicy?.workspaceID
+        else {
             saveError = "Setup isn't finished yet — try again in a moment."
             return
         }
@@ -67,7 +68,7 @@ struct ActionComposerView: View {
 
         let now = environment.clock.now()
         let action = Action(
-            actionID: ActionID(rawValue: UUID()), meetingID: meetingID, text: text,
+            actionID: ActionID(rawValue: UUID()), workspaceID: workspaceID, meetingID: meetingID, text: text,
             owner: assignToMe ? .explicit(selfPersonID) : .unresolved,
             date: hasDueDate ? .explicit(dueDate) : .unresolved,
             evidence: [], createdBy: selfPersonID,

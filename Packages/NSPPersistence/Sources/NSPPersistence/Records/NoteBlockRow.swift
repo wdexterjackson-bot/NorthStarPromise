@@ -10,7 +10,8 @@ struct NoteBlockRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "note_block"
 
     var blockID: String
-    var meetingID: String
+    var ownerID: String
+    var ownerKind: String
     var authorID: String
     var type: String
     var contentKind: String
@@ -28,7 +29,8 @@ struct NoteBlockRow: Codable, FetchableRecord, PersistableRecord {
 
     enum CodingKeys: String, CodingKey {
         case blockID = "block_id"
-        case meetingID = "meeting_id"
+        case ownerID = "meeting_id"
+        case ownerKind = "owner_kind"
         case authorID = "author_id"
         case type
         case contentKind = "content_kind"
@@ -47,7 +49,9 @@ struct NoteBlockRow: Codable, FetchableRecord, PersistableRecord {
 
     init(block: NoteBlock, createdAt: Date, updatedAt: Date, rowRevision: Int) {
         self.blockID = block.blockID.rawValue.uuidString
-        self.meetingID = block.meetingID.rawValue.uuidString
+        let owner = ContentOwnerRefColumns.encode(block.owner)
+        self.ownerID = owner.id
+        self.ownerKind = owner.kind
         self.authorID = block.authorID.rawValue.uuidString
         self.type = block.type.rawValue
         let encodedContent = Self.encode(block.content)
@@ -106,14 +110,11 @@ struct NoteBlockRow: Codable, FetchableRecord, PersistableRecord {
         }
     }
 
-    // swiftlint:disable:next cyclomatic_complexity
     func asDomain(opLog: [NSPCore.Operation]) throws -> NoteBlock {
         guard let blockUUID = UUID(uuidString: blockID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "block_id", value: blockID)
         }
-        guard let meetingUUID = UUID(uuidString: meetingID) else {
-            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "meeting_id", value: meetingID)
-        }
+        let owner = try ContentOwnerRefColumns.decode(id: ownerID, kind: ownerKind, table: Self.databaseTableName)
         guard let authorUUID = UUID(uuidString: authorID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "author_id", value: authorID)
         }
@@ -145,7 +146,7 @@ struct NoteBlockRow: Codable, FetchableRecord, PersistableRecord {
 
         return NoteBlock(
             blockID: NoteBlockID(rawValue: blockUUID),
-            meetingID: MeetingID(rawValue: meetingUUID),
+            owner: owner,
             authorID: PersonID(rawValue: authorUUID),
             type: blockType,
             content: try Self.decodeContent(

@@ -59,7 +59,7 @@ struct GRDBTranscriptTurnRepositoryTests {
 
     private static func makeTurn(meetingID: MeetingID, segmentID: SegmentID, startSample: Int64) -> TranscriptTurn {
         TranscriptTurn(
-            turnID: TranscriptTurnID(rawValue: UUID()), meetingID: meetingID, revision: 1, isProvisional: false,
+            turnID: TranscriptTurnID(rawValue: UUID()), owner: .meeting(meetingID), revision: 1, isProvisional: false,
             tokens: [
                 Token(text: "Hello", startSample: startSample, endSample: startSample + 100, confidence: 0.95),
                 Token(text: "world", startSample: startSample + 100, endSample: startSample + 200, confidence: 0.9),
@@ -93,7 +93,7 @@ struct GRDBTranscriptTurnRepositoryTests {
         try await repository.insert(later, at: Date())
         try await repository.insert(earlier, at: Date())
 
-        let all = try await repository.fetchAll(meetingID: graph.meetingID)
+        let all = try await repository.fetchAll(owner: .meeting(graph.meetingID))
         #expect(all.map(\.turnID) == [earlier.turnID, later.turnID])
     }
 
@@ -106,7 +106,7 @@ struct GRDBTranscriptTurnRepositoryTests {
         try await repository.insert(turn, at: Date())
 
         turn = TranscriptTurn(
-            turnID: turn.turnID, meetingID: turn.meetingID, revision: turn.revision, isProvisional: false,
+            turnID: turn.turnID, owner: turn.owner, revision: turn.revision, isProvisional: false,
             tokens: [Token(text: "Hi", startSample: 0, endSample: 50, confidence: 1.0)], segmentRefs: turn.segmentRefs)
         try await repository.update(turn, at: Date())
 

@@ -1,3 +1,4 @@
+import EventKit
 import Foundation
 import NSPActions
 import NSPCore
@@ -28,15 +29,57 @@ public final class AppEnvironment {
     public let transcriptTurnRepository: any TranscriptTurnRepository
     public let insightRepository: any InsightRepository
     public let calendarEventWriter: any CalendarEventWriter
+    public let calendarEventReader: any CalendarEventReader
+    public let scheduledRecordingRepository: any ScheduledRecordingRepository
+    public let projectRepository: any ProjectRepository
+    public let decisionRepository: any DecisionRepository
+    /// People's attendee data (`Person`'s own doc comment) and Threads'
+    /// storyline grouping — see `Project`'s and `NSPThread`'s doc comments
+    /// for how the two independent groupings differ.
+    public let meetingAttendeeRepository: any MeetingAttendeeRepository
+    public let threadRepository: any NSPThreadRepository
+    public let brainDumpRepository: any BrainDumpRepository
+    public let noteRepository: any NoteRepository
+    /// System-suggested threads' dismissal memory (`ThreadsListView`'s
+    /// "Suggested" section) — see `ThreadSuggestionDismissalRepository`'s
+    /// own doc comment for why the fingerprint is opaque at this layer.
+    public let threadSuggestionDismissalRepository: any ThreadSuggestionDismissalRepository
     public let inkAssetFileSystem: any InkAssetFileSystem
+    /// Ask's retrieval half (docs/04 §10.3) — `embedder`/`embeddingRepository`
+    /// also back `IntelligenceCoordinator`'s post-recording indexing, so
+    /// both live here rather than being constructed twice.
+    public let embedder: any EmbedderProtocol
+    public let embeddingRepository: any EmbeddingRepository
+    public let ftsQueryService: any FTSQueryService
+    /// Ask's answering half (docs/04 §10.4).
+    public let askAnswerer: any AskAnswerer
+    /// Not `AskCoordinator` itself — that's constructed by the view layer
+    /// once `defaultPolicy` is known, same lifecycle `RecordingSession`
+    /// already follows (`AskCoordinator`'s own doc comment explains why a
+    /// `HybridRetriever` can't be built this early).
+    public let askAuthorizationResolver: AskAuthorizationResolver
     /// The single I5 choke point (docs/06 §2) — every `NSPSync` write
     /// already calls this internally; `syncCoordinator` below is the only
     /// thing in `App/Phone` that needs it directly.
     public let networkGate: any NetworkGate
     public let syncCoordinator: AppSyncCoordinator
     public let intelligenceCoordinator: IntelligenceCoordinator
+    public let scheduledRecordingCoordinator: ScheduledRecordingCoordinator
+    /// Off until wired to a remote-config/build-setting-backed provider —
+    /// `AllFlagsOffProvider` keeps every `FeatureFlag` off by default
+    /// (`CLAUDE.md` §5.8).
+    public let featureFlagProvider: any FeatureFlagProviding
 
     public let containerRootURL: URL
+    /// The "North-Star Promise" folder every installation creates in its
+    /// `Documents` directory (`AppEnvironmentFactories.resolveStorageDirectories`)
+    /// — visible in the on-device Files app, the default place a user drops
+    /// a recording in for import. Unlike `containerRootURL`, this has
+    /// nothing to do with a meeting's durable segment/manifest storage; it
+    /// only exists so imports/exports have one well-known, user-browsable
+    /// home. `nil` only if `Documents` itself couldn't be resolved — never
+    /// blocks app launch.
+    public let defaultImportExportDirectoryURL: URL?
     public let deviceID: DeviceID
     public let clock: any Clock
 
@@ -54,6 +97,17 @@ public final class AppEnvironment {
         didSet { UserDefaults.standard.set(selectedCalendarIdentifier, forKey: Self.selectedCalendarIdentifierKey) }
     }
 
+    /// Settings' explicit dark-mode override (docs/07's own instruction:
+    /// the Dashboard's design system ships both themes on both devices —
+    /// §2.1 of `DASHBOARD_SPEC.md` — and Settings must let the user pin one
+    /// rather than only following the system). `.system` means "no
+    /// override" — `RootView` applies this via `.preferredColorScheme(_:)`
+    /// at the very top of the view tree so it wins over the OS setting
+    /// everywhere, not just on screens re-skinned to the new design system.
+    public var appearanceMode: AppearanceMode {
+        didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: Self.appearanceModeKey) }
+    }
+
     /// The one local workspace/policy this build creates on first launch
     /// (docs/06 §1.1's safest default: `.localOnly`). Multi-workspace
     /// creation/switching UI doesn't exist yet — every meeting Arms
@@ -67,61 +121,95 @@ public final class AppEnvironment {
     /// yet. `nil` until `bootstrap()` completes, same as `defaultPolicy`.
     public private(set) var selfPersonID: PersonID?
 
+    /// Set by `deleteMeeting(_:)` right after a delete succeeds — the one
+    /// broadcast every screen holding a *specific* meeting (not a list) can
+    /// observe to invalidate itself, since a delete triggered from a sibling
+    /// view (Library, Today, Actions) otherwise has no way to reach an
+    /// already-open `MeetingDetailView` or iPad's `selectedMeetingID`. Not
+    /// cleared after observers react to it — each observer compares against
+    /// its own meeting ID, so a stale value is simply never equal again
+    /// until the next delete.
+    public private(set) var lastDeletedMeetingID: MeetingID?
+
+    /// Bumped whenever content changed somewhere that doesn't have a single
+    /// owning screen to refresh directly — right now, just the
+    /// post-recording title/calendar prompts, which moved from `TodayView`
+    /// to the root views once Today stopped being a permanently mounted tab
+    /// (`TodayPromptSheets`' call site in `RootView.swift`/`PadRootView
+    /// .swift`). `DashboardView`/`TodayView` observe this and reload.
+    public private(set) var contentRevision = 0
+
+    public func bumpContentRevision() {
+        contentRevision += 1
+    }
+
     private static let defaultPolicyIDKey = "com.dexterjackson.northstarpromise.defaultPolicyID"
     private static let defaultWorkspaceIDKey = "com.dexterjackson.northstarpromise.defaultWorkspaceID"
     private static let selfPersonIDKey = "com.dexterjackson.northstarpromise.selfPersonID"
     private static let calendarSyncEnabledKey = "com.dexterjackson.northstarpromise.calendarSyncEnabled"
     private static let selectedCalendarIdentifierKey = "com.dexterjackson.northstarpromise.selectedCalendarIdentifier"
+    private static let appearanceModeKey = "com.dexterjackson.northstarpromise.appearanceMode"
 
     public init() throws {
-        let appSupportURL = try FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        let dbURL = appSupportURL.appendingPathComponent("NorthStar.sqlite")
-        let appDatabase = try AppDatabase(path: dbURL.path)
+        let (appSupportURL, defaultImportExportDirectoryURL) = try Self.resolveStorageDirectories()
+        let appDatabase = try AppDatabase(path: appSupportURL.appendingPathComponent("NorthStar.sqlite").path)
 
-        let meetingRepository = GRDBMeetingRepository(dbWriter: appDatabase.dbWriter)
-        let segmentRepository = GRDBSegmentRepository(dbWriter: appDatabase.dbWriter)
-        let policyRepository = GRDBPolicyRepository(dbWriter: appDatabase.dbWriter)
-        let consentRecordRepository = GRDBConsentRecordRepository(dbWriter: appDatabase.dbWriter)
-        let auditEventRepository = GRDBAuditEventRepository(dbWriter: appDatabase.dbWriter)
-        let transcriptTurnRepository = GRDBTranscriptTurnRepository(dbWriter: appDatabase.dbWriter)
-        let insightRepository = GRDBInsightRepository(dbWriter: appDatabase.dbWriter)
-        let actionRepository = GRDBActionRepository(dbWriter: appDatabase.dbWriter)
+        // Named type in place of a many-member tuple (SwiftLint's
+        // `large_tuple` rule caps tuples at 2 — same reasoning
+        // `MeetingStateBadge.Appearance` documents).
+        let repositories = Self.makeCoreRepositories(appDatabase)
         let clock = SystemClock()
 
-        let networkGate = DefaultNetworkGate(
-            auditRecorder: PersistedAuditEventRecorder(repository: auditEventRepository, clock: clock),
-            consentLookup: PersistedConsentRecordLookup(repository: consentRecordRepository),
-            policyLookup: PersistedPolicySnapshotLookup(
-                meetingRepository: meetingRepository, policyRepository: policyRepository))
+        // Shared between the writer and reader so the write-only and
+        // full-access EventKit grants aren't juggled by two independent
+        // `EKEventStore` lifecycles talking past each other
+        // (`EventKitCalendarEventReader`'s doc comment).
+        let calendarEventStore = EKEventStore()
+        let scheduledRecordingNotificationScheduler = ScheduledRecordingNotificationScheduler()
+        let networkGate = Self.makeNetworkGate(repositories: repositories, clock: clock)
+        let deviceID = Self.loadOrCreateDeviceID()
 
         self.appDatabase = appDatabase
-        self.meetingRepository = meetingRepository
-        self.segmentRepository = segmentRepository
+        self.meetingRepository = repositories.meeting
+        self.segmentRepository = repositories.segment
         self.timelineEventRepository = GRDBTimelineEventRepository(dbWriter: appDatabase.dbWriter)
         self.noteBlockRepository = GRDBNoteBlockRepository(dbWriter: appDatabase.dbWriter)
-        self.policyRepository = policyRepository
+        self.policyRepository = repositories.policy
         self.workspaceRepository = GRDBWorkspaceRepository(dbWriter: appDatabase.dbWriter)
         self.personRepository = GRDBPersonRepository(dbWriter: appDatabase.dbWriter)
-        self.actionRepository = actionRepository
-        self.consentRecordRepository = consentRecordRepository
-        self.auditEventRepository = auditEventRepository
-        self.transcriptTurnRepository = transcriptTurnRepository
-        self.insightRepository = insightRepository
-        self.calendarEventWriter = EventKitCalendarEventWriter()
+        self.actionRepository = repositories.action
+        self.consentRecordRepository = repositories.consentRecord
+        self.auditEventRepository = repositories.auditEvent
+        self.transcriptTurnRepository = repositories.transcriptTurn
+        self.insightRepository = repositories.insight
+        self.calendarEventWriter = EventKitCalendarEventWriter(store: calendarEventStore)
+        self.calendarEventReader = EventKitCalendarEventReader(store: calendarEventStore)
+        self.scheduledRecordingRepository = repositories.scheduledRecording
+        (self.projectRepository, self.decisionRepository) = (repositories.project, repositories.decision)
+        (self.meetingAttendeeRepository, self.threadRepository) = (repositories.meetingAttendee, repositories.thread)
+        (self.brainDumpRepository, self.noteRepository) = (repositories.brainDump, repositories.note)
+        self.threadSuggestionDismissalRepository = GRDBThreadSuggestionDismissalRepository(
+            dbWriter: appDatabase.dbWriter)
         self.inkAssetFileSystem = LiveInkAssetFileSystem()
         self.networkGate = networkGate
-        self.syncCoordinator = AppSyncCoordinator(
-            networkGate: networkGate, meetingRepository: meetingRepository, segmentRepository: segmentRepository)
-        self.intelligenceCoordinator = IntelligenceCoordinator(
-            segmentRepository: segmentRepository, transcriptTurnRepository: transcriptTurnRepository,
-            insightRepository: insightRepository, actionRepository: actionRepository,
-            meetingRepository: meetingRepository, clock: clock)
-        self.containerRootURL = appSupportURL
-        self.deviceID = Self.loadOrCreateDeviceID()
-        self.clock = clock
+        let ask = Self.makeAskDependencies(appDatabase, repositories: repositories, deviceID: deviceID)
+        self.embedder = ask.embedder
+        self.embeddingRepository = ask.embeddingRepository
+        self.ftsQueryService = ask.ftsQueryService
+        self.askAnswerer = ask.askAnswerer
+        self.askAuthorizationResolver = ask.askAuthorizationResolver
+        let coordinators = Self.makeCoordinators(
+            repositories: repositories, ask: ask, clock: clock,
+            notificationScheduler: scheduledRecordingNotificationScheduler, networkGate: networkGate)
+        self.syncCoordinator = coordinators.sync
+        self.intelligenceCoordinator = coordinators.intelligence
+        self.scheduledRecordingCoordinator = coordinators.scheduledRecording
+        self.featureFlagProvider = ScheduledRecordingEnabledProvider()
+        (self.containerRootURL, self.deviceID, self.clock) = (appSupportURL, deviceID, clock)
+        self.defaultImportExportDirectoryURL = defaultImportExportDirectoryURL
         self.calendarSyncEnabled = UserDefaults.standard.bool(forKey: Self.calendarSyncEnabledKey)
         self.selectedCalendarIdentifier = UserDefaults.standard.string(forKey: Self.selectedCalendarIdentifierKey)
+        self.appearanceMode = Self.loadAppearanceMode()
     }
 
     /// Updates the published `defaultPolicy` after a caller has already
@@ -174,11 +262,18 @@ public final class AppEnvironment {
     }
 
     /// Builds a fresh `MeetingContainer` and its on-disk directory
-    /// structure for `meetingID` — call once, at Arming.
-    public func makeMeetingContainer(meetingID: MeetingID) throws -> MeetingContainer {
-        let container = MeetingContainer(appContainerURL: containerRootURL, meetingID: meetingID)
+    /// structure for `owner` — call once, at Arming, for any of the three
+    /// recordable containers (`Meeting`/`BrainDump`/`Note`).
+    public func makeContainer(owner: ContentOwnerRef) throws -> MeetingContainer {
+        let container = MeetingContainer(appContainerURL: containerRootURL, owner: owner)
         try container.ensureDirectoryStructure(using: LiveContainerFileSystem())
         return container
+    }
+
+    /// `makeContainer(owner:)` convenience for the many existing call sites
+    /// that only ever address a real `Meeting`.
+    public func makeMeetingContainer(meetingID: MeetingID) throws -> MeetingContainer {
+        try makeContainer(owner: .meeting(meetingID))
     }
 
     /// Deletes a meeting outright: the DB row first (cascades every child
@@ -193,15 +288,51 @@ public final class AppEnvironment {
     /// already succeeded.
     public func deleteMeeting(_ meetingID: MeetingID) async throws {
         try await meetingRepository.delete(meetingID)
-        let container = MeetingContainer(appContainerURL: containerRootURL, meetingID: meetingID)
-        try? LiveContainerFileSystem().removeDirectory(at: container.rootURL)
+        try? LiveContainerFileSystem().removeDirectory(
+            at: MeetingContainer(appContainerURL: containerRootURL, owner: .meeting(meetingID)).rootURL)
+        lastDeletedMeetingID = meetingID
+    }
+
+    /// Same shape as `deleteMeeting(_:)` — DB row (`BrainDumpRepository`
+    /// explicitly cleans up its owned segments/transcript turns/timeline
+    /// events first, same as `MeetingRepository.delete`'s doc comment, since
+    /// neither table is a real SQL foreign key any more) then best-effort
+    /// disk cleanup.
+    public func deleteBrainDump(_ brainDumpID: BrainDumpID) async throws {
+        try await brainDumpRepository.delete(brainDumpID)
+        try? LiveContainerFileSystem().removeDirectory(
+            at: MeetingContainer(appContainerURL: containerRootURL, owner: .brainDump(brainDumpID)).rootURL)
+    }
+
+    /// Same shape as `deleteMeeting(_:)` — a `Note` with no recording ever
+    /// attached has no on-disk container to clean up, so the best-effort
+    /// removal below is simply a no-op for it.
+    public func deleteNote(_ noteID: NoteID) async throws {
+        try await noteRepository.delete(noteID)
+        try? LiveContainerFileSystem().removeDirectory(
+            at: MeetingContainer(appContainerURL: containerRootURL, owner: .note(noteID)).rootURL)
+    }
+
+    /// Composes the Dashboard's single shared view model
+    /// (`DashboardComposer`'s own doc comment: reads already-persisted
+    /// data, never calls the network/embedder/an LLM). Both iPhone and
+    /// iPad Dashboard screens call this same method so the two builds
+    /// render pure functions of one model, per `DASHBOARD_SPEC.md` §6.
+    public func composeDashboard() async throws -> DashboardModel? {
+        guard let workspaceID = defaultPolicy?.workspaceID else { return nil }
+        let repositories = DashboardRepositories(
+            meeting: meetingRepository, action: actionRepository, decision: decisionRepository, thread: threadRepository
+        )
+        return try await DashboardComposer.compose(workspaceID: workspaceID, repositories: repositories, clock: clock)
     }
 
     /// Builds a `CaptureEngine` wired to real capture (`AVAudioEngine`),
     /// real encoding (`AVAudioFile`/AAC), and real durable storage for one
-    /// meeting. A fresh instance per recording session — `CaptureEngine`
-    /// and `Segmenter` are both single-session actors, not singletons.
-    public func makeCaptureEngine(meetingID: MeetingID, container: MeetingContainer) -> CaptureEngine {
+    /// recording session — a `Meeting`, a `BrainDump`, or a `Note` that just
+    /// had a recording attached. A fresh instance per session —
+    /// `CaptureEngine` and `Segmenter` are both single-session actors, not
+    /// singletons.
+    public func makeCaptureEngine(owner: ContentOwnerRef, container: MeetingContainer) -> CaptureEngine {
         let manifestWriter = ManifestWriter(container: container, fileSystem: LiveManifestFileSystem())
         let segmentRepository = segmentRepository
         let timelineEventRepository = timelineEventRepository
@@ -213,17 +344,23 @@ public final class AppEnvironment {
                 container: container, audioEncoder: AVAudioFileSegmentEncoder(),
                 segmentFileSystem: LiveSegmentFileSystem(), manifestWriter: manifestWriter,
                 segmentRepository: segmentRepository, timelineEventRepository: timelineEventRepository, clock: clock,
-                meetingID: meetingID, deviceID: deviceID, audioFormat: format)
+                owner: owner, deviceID: deviceID, audioFormat: format)
         }
     }
 
-    private static func loadOrCreateDeviceID() -> DeviceID {
-        let key = "com.dexterjackson.northstarpromise.deviceID"
-        if let stored = UserDefaults.standard.string(forKey: key), let uuid = UUID(uuidString: stored) {
-            return DeviceID(rawValue: uuid)
-        }
-        let fresh = DeviceID(rawValue: UUID())
-        UserDefaults.standard.set(fresh.rawValue.uuidString, forKey: key)
-        return fresh
+}
+
+/// `AllFlagsOffProvider` plus one exception — the user has explicitly
+/// directed Scheduled Recording into daily use in Today (docs/07 §2.1),
+/// ahead of a real remote-config/build-setting-backed provider existing.
+/// Flipping this does not resolve `NSP-149`'s two open hardware-validation
+/// risks (EventKit full-access/write-only grant interaction; whether a
+/// live recording and its auto-stop timer survive backgrounding without
+/// `UIBackgroundModes: audio` declared) — those stay real, open risks,
+/// this only makes the feature reachable. `AllFlagsOffProvider` itself is
+/// untouched, so anything else relying on "every flag off" keeps working.
+private struct ScheduledRecordingEnabledProvider: FeatureFlagProviding {
+    func isEnabled(_ flag: FeatureFlag) -> Bool {
+        flag == .scheduledRecording
     }
 }

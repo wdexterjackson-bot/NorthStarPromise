@@ -6,7 +6,7 @@ import Foundation
 public struct TimelineEvent: Sendable, Hashable, Codable, Identifiable {
     public let eventID: TimelineEventID
     public var id: TimelineEventID { eventID }
-    public let meetingID: MeetingID
+    public let owner: ContentOwnerRef
     public let deviceID: DeviceID
 
     public let type: TimelineEventType
@@ -16,7 +16,7 @@ public struct TimelineEvent: Sendable, Hashable, Codable, Identifiable {
 
     public init(
         eventID: TimelineEventID,
-        meetingID: MeetingID,
+        owner: ContentOwnerRef,
         deviceID: DeviceID,
         type: TimelineEventType,
         sampleOffset: Int64,
@@ -24,7 +24,7 @@ public struct TimelineEvent: Sendable, Hashable, Codable, Identifiable {
         payload: JSONValue? = nil
     ) {
         self.eventID = eventID
-        self.meetingID = meetingID
+        self.owner = owner
         self.deviceID = deviceID
         self.type = type
         self.sampleOffset = sampleOffset

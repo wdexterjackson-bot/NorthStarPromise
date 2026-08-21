@@ -3,13 +3,14 @@ import NSPDesignSystem
 import SwiftUI
 import UIKit
 
-/// The app's dashboard — the primary launch screen. Beyond docs/07 §4's
-/// fixed section order (Now, Needs review, Upcoming, Attention), this adds
-/// two cross-meeting views a busy user managing several meetings needs at
-/// a glance: every open action item regardless of which meeting produced
-/// it, and a Library preview — the "executive assistant" framing behind
-/// this screen's design. Sections with nothing to show are simply absent,
-/// never invented content (docs/07 §11).
+/// "What do I need to do today" — narrower than it used to be. `DashboardView`
+/// is now the primary launch screen and owns the "manage everything, across
+/// all time" concerns (a full library preview, every open action
+/// regardless of due date); Today keeps only what's actually about today:
+/// the active/next recording, meetings that just finished processing and
+/// need review, today's Scheduled Recordings, and actions due today.
+/// Sections with nothing to show are simply absent, never invented content
+/// (docs/07 §11).
 @MainActor
 struct TodayView: View {
     let environment: AppEnvironment
@@ -23,11 +24,13 @@ struct TodayView: View {
 
     @State private var meetings: [Meeting] = []
     @State private var actions: [Action] = []
+    @State private var scheduledRecordings: [ScheduledRecording] = []
+    @State private var isShowingScheduleForm = false
+    @State private var editingScheduledRecording: ScheduledRecording?
     @State private var loadError: String?
 
     private static let openStatuses: Set<ActionStatus> = [.proposed, .confirmed, .sent, .inProgress]
     private static let maxActionRows = 5
-    private static let maxLibraryRows = 3
 
     private var meetingTitles: [MeetingID: String] {
         Dictionary(
@@ -40,30 +43,16 @@ struct TodayView: View {
         meetings.filter { $0.lifecycleState == .readyForReview || $0.lifecycleState == .partialFailure }
     }
 
-    private var openActions: [Action] {
-        actions.filter { Self.openStatuses.contains($0.status) }
-            .sorted { lhs, rhs in
-                switch (Self.dueDate(lhs), Self.dueDate(rhs)) {
-                case (let left?, let right?): return left < right
-                case (.some, nil): return true
-                case (nil, .some): return false
-                case (nil, nil): return false
-                }
-            }
-    }
-
-    private var overdueActionCount: Int {
-        let now = environment.clock.now()
-        return openActions.filter { action in
-            guard let due = Self.dueDate(action) else { return false }
-            return due < now
-        }.count
-    }
-
-    private var meetingsThisWeek: Int {
-        let now = environment.clock.now()
-        let weekAgo = now.addingTimeInterval(-7 * 24 * 3600)
-        return meetings.filter { $0.startedAt >= weekAgo && $0.startedAt <= now }.count
+    /// Unlike `DashboardView`'s copy of this same shape, filtered to only
+    /// what's actually due today — Today answers "what do I need to do
+    /// today," not "show me every open action ever."
+    private var actionsDueToday: [Action] {
+        actions.filter { action in
+            Self.openStatuses.contains(action.status)
+                && Self.dueDate(action).map(Calendar.current.isDateInToday)
+                    ?? false
+        }
+        .sorted { lhs, rhs in (Self.dueDate(lhs) ?? .distantFuture) < (Self.dueDate(rhs) ?? .distantFuture) }
     }
 
     var body: some View {
@@ -71,35 +60,61 @@ struct TodayView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: NSPSpacing.extraLarge) {
                     if let loadError {
-                        Text(loadError).font(.caption).foregroundStyle(NSPColor.statusDanger)
+                        Text(loadError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
                     }
-                    statsStrip
+                    dateHeader
                     nowSection
                     needsReviewSection
-                    openActionsSection
-                    libraryPreviewSection
+                    upcomingSection
+                    dueTodayActionsSection
                 }
                 .padding(NSPSpacing.large)
             }
-            .background(NSPColor.background)
+            .background(Palette.canvas)
             .navigationTitle("Today")
             .navigationDestination(for: MeetingID.self) { meetingID in
                 MeetingDetailView(meetingID: meetingID, environment: environment)
             }
             .task { await load() }
             .refreshable { await load() }
+            .onChange(of: environment.contentRevision) { _, _ in Task { await load() } }
         }
-        .modifier(TodayPromptSheets(session: session, environment: environment, onDismiss: load))
+        .sheet(isPresented: $isShowingScheduleForm) {
+            ScheduleRecordingFormView(environment: environment, onDone: { Task { await load() } })
+        }
+        .sheet(item: $editingScheduledRecording) { item in
+            ScheduleRecordingFormView(environment: environment, existingItem: item, onDone: { Task { await load() } })
+        }
     }
 
-    private var statsStrip: some View {
-        HStack(spacing: NSPSpacing.medium) {
-            DashboardStatChip(value: "\(meetingsThisWeek)", label: "This week", tint: NSPColor.accent)
-            DashboardStatChip(value: "\(openActions.count)", label: "Open actions", tint: NSPColor.statusInProgress)
-            if overdueActionCount > 0 {
-                DashboardStatChip(value: "\(overdueActionCount)", label: "Overdue", tint: NSPColor.statusDanger)
-            }
+    /// Today only, unlike `DashboardView`'s unfiltered copy of this same
+    /// section — Today answers "what's happening today," not "everything
+    /// scheduled, ever."
+    private var todaysScheduledRecordings: [ScheduledRecording] {
+        scheduledRecordings.filter { Calendar.current.isDateInToday($0.scheduledStart) }
+    }
+
+    /// Behind `FeatureFlag.scheduledRecording` (default off) — docs/07 §4's
+    /// planned Today section, formalized from covering calendar-derived
+    /// entries only to covering schedule-created ones too. Pulled into its
+    /// own view (`TodayDashboardSupport.swift`) purely to stay under this
+    /// repo's 250-line type-body budget, same as `TodayPromptSheets`.
+    @ViewBuilder
+    private var upcomingSection: some View {
+        if environment.featureFlagProvider.isEnabled(.scheduledRecording) {
+            UpcomingRecordingsSection(
+                items: todaysScheduledRecordings, onScheduleTapped: { isShowingScheduleForm = true },
+                onEdit: { editingScheduledRecording = $0 }, onCancel: { item in Task { await cancelSchedule(item) } })
         }
+    }
+
+    /// The full date ("Friday, August 21, 2026") — `.navigationTitle("Today")`
+    /// already names the screen, this just grounds it in an actual date.
+    private var dateHeader: some View {
+        Text(Date.now, format: .dateTime.weekday(.wide).month(.wide).day().year())
+            .font(Typo.ui(13, .medium))
+            .foregroundStyle(Palette.textTertiary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
@@ -123,8 +138,9 @@ struct TodayView: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: NSPSpacing.medium) {
                 NSPStatusBadge(
-                    symbolName: "exclamationmark.triangle.fill", label: "Couldn't record", tint: NSPColor.statusDanger)
-                Text(message).font(.callout).foregroundStyle(NSPColor.secondaryText)
+                    symbolName: "exclamationmark.triangle.fill", label: "Couldn't record",
+                    tint: Palette.danger.foreground)
+                Text(message).font(Typo.ui(13, .medium)).foregroundStyle(Palette.textTertiary)
                 Button("Try again") { session.dismissFailure() }
                     .buttonStyle(.borderedProminent)
             }
@@ -145,10 +161,10 @@ struct TodayView: View {
                         .foregroundStyle(.white)
                 }
                 VStack(spacing: 2) {
-                    Text("Start Recording").font(.title3.weight(.semibold))
+                    Text("Start Recording").font(Typo.ui(17, .bold))
                     Text("Capture audio on this \(Self.deviceLabel)")
-                        .font(.caption)
-                        .foregroundStyle(NSPColor.secondaryText)
+                        .font(Typo.ui(11.5, .medium))
+                        .foregroundStyle(Palette.textTertiary)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -161,7 +177,7 @@ struct TodayView: View {
     private func centeredStatusCard(message: String) -> some View {
         HStack(spacing: NSPSpacing.medium) {
             ProgressView()
-            Text(message).font(.callout).foregroundStyle(NSPColor.secondaryText)
+            Text(message).font(Typo.ui(13, .medium)).foregroundStyle(Palette.textTertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, NSPSpacing.large)
@@ -172,7 +188,7 @@ struct TodayView: View {
     private var needsReviewSection: some View {
         if !needsReview.isEmpty {
             VStack(alignment: .leading, spacing: NSPSpacing.medium) {
-                Text("Needs Review").font(.title3.weight(.bold))
+                Text("Needs Review").font(Typo.ui(17, .extrabold))
                 ForEach(needsReview) { meeting in
                     meetingLink(meeting.meetingID) {
                         MeetingRow(meeting: meeting, onDelete: { Task { await deleteMeeting(meeting.meetingID) } })
@@ -183,48 +199,23 @@ struct TodayView: View {
         }
     }
 
-    /// Every open action across every meeting — "the master list to help
-    /// the user stay organized," per the product direction behind this
-    /// screen. Each row still names its source meeting and links to it.
+    /// Actions due specifically today — `DashboardView` shows the unfiltered
+    /// "every open action" version of this same reusable component; this is
+    /// the narrower, today-only view.
     @ViewBuilder
-    private var openActionsSection: some View {
-        if !openActions.isEmpty {
-            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
-                sectionHeader("Action Items", seeAllTab: .actions)
-                ForEach(openActions.prefix(Self.maxActionRows)) { action in
-                    meetingLink(action.meetingID) {
-                        DashboardActionRow(
-                            action: action, meetingTitle: meetingTitles[action.meetingID] ?? "Untitled meeting",
-                            isOverdue: Self.isOverdue(action, now: environment.clock.now()),
-                            onDelete: { Task { await deleteAction(action.actionID) } })
-                    }
-                }
-            }
-        }
-    }
-
-    /// A Library preview — recent meetings not already surfaced above, so
-    /// the dashboard doubles as "what have I been recording lately"
-    /// without requiring a tab switch for the common case.
-    @ViewBuilder
-    private var libraryPreviewSection: some View {
-        let needsReviewIDs = Set(needsReview.map(\.meetingID))
-        let recent = meetings.filter { !needsReviewIDs.contains($0.meetingID) }.sorted { $0.startedAt > $1.startedAt }
-        if !recent.isEmpty {
-            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
-                sectionHeader("Library", seeAllTab: .library)
-                ForEach(recent.prefix(Self.maxLibraryRows)) { meeting in
-                    meetingLink(meeting.meetingID) {
-                        MeetingRow(meeting: meeting, onDelete: { Task { await deleteMeeting(meeting.meetingID) } })
-                            .nspCard()
-                    }
-                }
-            }
+    private var dueTodayActionsSection: some View {
+        if !actionsDueToday.isEmpty {
+            OpenActionsSection(
+                actions: Array(actionsDueToday.prefix(Self.maxActionRows)), meetingTitles: meetingTitles,
+                now: environment.clock.now(), onSelectMeeting: onSelectMeeting, onSeeAll: { selectTab(.actions) },
+                onDelete: { actionID in Task { await deleteAction(actionID) } })
         }
     }
 
     /// Routes a meeting tap to either a navigation push (iPhone) or the
     /// `onSelectMeeting` callback (iPad) — see the property's doc comment.
+    /// Still used directly by `needsReviewSection` above, which stays small
+    /// enough not to need its own extracted view.
     @ViewBuilder
     private func meetingLink<Label: View>(_ meetingID: MeetingID, @ViewBuilder label: () -> Label) -> some View {
         if let onSelectMeeting {
@@ -240,15 +231,6 @@ struct TodayView: View {
         }
     }
 
-    private func sectionHeader(_ title: String, seeAllTab: AppTab) -> some View {
-        HStack {
-            Text(title).font(.title3.weight(.bold))
-            Spacer()
-            Button("See All") { selectTab(seeAllTab) }
-                .font(.subheadline)
-        }
-    }
-
     private func load() async {
         guard let workspaceID = environment.defaultPolicy?.workspaceID else { return }
         do {
@@ -259,6 +241,11 @@ struct TodayView: View {
             actions = try await fetchedActions
         } catch {
             loadError = "\(error)"
+        }
+        if environment.featureFlagProvider.isEnabled(.scheduledRecording) {
+            scheduledRecordings =
+                (try? await environment.scheduledRecordingRepository.fetchPending(
+                    workspaceID: workspaceID)) ?? []
         }
     }
 
@@ -280,16 +267,20 @@ struct TodayView: View {
         }
     }
 
+    private func cancelSchedule(_ item: ScheduledRecording) async {
+        do {
+            try await environment.scheduledRecordingCoordinator.cancelSchedule(item)
+            await load()
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
     private static func dueDate(_ action: Action) -> Date? {
         switch action.date {
         case .explicit(let date), .inferred(let date): return date
         case .unresolved: return nil
         }
-    }
-
-    private static func isOverdue(_ action: Action, now: Date) -> Bool {
-        guard let due = dueDate(action) else { return false }
-        return due < now
     }
 
     static var deviceLabel: String {

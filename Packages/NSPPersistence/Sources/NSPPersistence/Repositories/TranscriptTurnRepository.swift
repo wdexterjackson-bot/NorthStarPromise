@@ -11,7 +11,7 @@ public protocol TranscriptTurnRepository: Sendable {
     func find(_ id: TranscriptTurnID) async throws -> TranscriptTurn?
     /// Ordered by the first token's `startSample` — the canonical reading
     /// order for a transcript, never insertion order.
-    func fetchAll(meetingID: MeetingID) async throws -> [TranscriptTurn]
+    func fetchAll(owner: ContentOwnerRef) async throws -> [TranscriptTurn]
     func delete(_ id: TranscriptTurnID) async throws
 }
 
@@ -52,11 +52,12 @@ public struct GRDBTranscriptTurnRepository: TranscriptTurnRepository {
         }
     }
 
-    public func fetchAll(meetingID: MeetingID) async throws -> [TranscriptTurn] {
-        try await dbWriter.read { db in
+    public func fetchAll(owner: ContentOwnerRef) async throws -> [TranscriptTurn] {
+        let encoded = ContentOwnerRefColumns.encode(owner)
+        return try await dbWriter.read { db in
             let rows =
                 try TranscriptTurnRow
-                .filter(Column("meeting_id") == meetingID.rawValue.uuidString)
+                .filter(Column("meeting_id") == encoded.id && Column("owner_kind") == encoded.kind)
                 .fetchAll(db)
             let turns = try rows.map { try Self.assemble($0, in: db) }
             return turns.sorted { ($0.tokens.first?.startSample ?? 0) < ($1.tokens.first?.startSample ?? 0) }

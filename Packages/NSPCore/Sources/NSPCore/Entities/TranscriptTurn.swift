@@ -37,7 +37,7 @@ public struct LanguageSpan: Sendable, Hashable, Codable {
 public struct TranscriptTurn: Sendable, Hashable, Codable, Identifiable {
     public let turnID: TranscriptTurnID
     public var id: TranscriptTurnID { turnID }
-    public let meetingID: MeetingID
+    public let owner: ContentOwnerRef
 
     public let revision: Int
     public let isProvisional: Bool
@@ -52,7 +52,7 @@ public struct TranscriptTurn: Sendable, Hashable, Codable, Identifiable {
 
     public init(
         turnID: TranscriptTurnID,
-        meetingID: MeetingID,
+        owner: ContentOwnerRef,
         revision: Int,
         isProvisional: Bool,
         speakerClusterID: String? = nil,
@@ -63,7 +63,7 @@ public struct TranscriptTurn: Sendable, Hashable, Codable, Identifiable {
         editState: EditState = .machine
     ) {
         self.turnID = turnID
-        self.meetingID = meetingID
+        self.owner = owner
         self.revision = revision
         self.isProvisional = isProvisional
         self.speakerClusterID = speakerClusterID
