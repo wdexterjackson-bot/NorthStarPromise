@@ -75,3 +75,6 @@ public typealias RecurrenceRuleID = TypedID<RecurrenceRuleIDTag>
 
 public enum RecurrenceExceptionIDTag: Sendable {}
 public typealias RecurrenceExceptionID = TypedID<RecurrenceExceptionIDTag>
+
+public enum AmbientSuggestionIDTag: Sendable {}
+public typealias AmbientSuggestionID = TypedID<AmbientSuggestionIDTag>

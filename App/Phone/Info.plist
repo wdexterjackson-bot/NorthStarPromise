@@ -25,9 +25,9 @@
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in Settings.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it.</string>
+	<string>North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it, and — only while you've turned on Ambient Mode — listens for action items and reminders without recording anything.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>North-Star Promise transcribes your recordings on this device so it can generate a summary and action items.</string>
+	<string>North-Star Promise transcribes your recordings on this device so it can generate a summary and action items, and — only while Ambient Mode is on — recognizes speech on-device to suggest action items without keeping a recording or transcript.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>InstrumentSerif-Regular.ttf</string>

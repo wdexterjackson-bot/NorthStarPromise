@@ -278,6 +278,7 @@ extension ThreadKind {
         case .initiative: return "Initiative"
         case .recurring: return "Recurring"
         case .oneOnOne: return "1:1"
+        case .household: return "Household"
         }
     }
 }

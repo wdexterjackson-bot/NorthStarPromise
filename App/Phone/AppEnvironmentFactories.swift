@@ -95,6 +95,7 @@ extension AppEnvironment {
         let recurrenceException: any RecurrenceExceptionRepository
         let threadParticipant: any ThreadParticipantRepository
         let projectPerson: any ProjectPersonRepository
+        let ambientSuggestion: any AmbientSuggestionRepository
     }
 
     static func makeCoreRepositories(_ appDatabase: AppDatabase) -> CoreRepositories {
@@ -114,7 +115,8 @@ extension AppEnvironment {
             recurrenceRule: GRDBRecurrenceRuleRepository(dbWriter: dbWriter),
             recurrenceException: GRDBRecurrenceExceptionRepository(dbWriter: dbWriter),
             threadParticipant: GRDBThreadParticipantRepository(dbWriter: dbWriter),
-            projectPerson: GRDBProjectPersonRepository(dbWriter: dbWriter))
+            projectPerson: GRDBProjectPersonRepository(dbWriter: dbWriter),
+            ambientSuggestion: GRDBAmbientSuggestionRepository(dbWriter: dbWriter))
     }
 
     static func loadAppearanceMode() -> AppearanceMode {

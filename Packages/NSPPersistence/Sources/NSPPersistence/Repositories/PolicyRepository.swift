@@ -68,7 +68,14 @@ public struct GRDBPolicyRepository: PolicyRepository {
             .order(Column("position"))
             .fetchAll(db)
             .map(\.location)
-        return try row.asDomain(blockedDomains: domains, blockedLocations: locations)
+        let ambientTrustedLocations =
+            try PolicyAmbientTrustedLocationRow
+            .filter(Column("policy_id") == policyID)
+            .order(Column("position"))
+            .fetchAll(db)
+            .map(\.location)
+        return try row.asDomain(
+            blockedDomains: domains, blockedLocations: locations, ambientTrustedLocations: ambientTrustedLocations)
     }
 
     /// Replaces every child row for this policy — same delete-then-reinsert
@@ -81,6 +88,10 @@ public struct GRDBPolicyRepository: PolicyRepository {
         try db.execute(sql: "DELETE FROM policy_blocked_location WHERE policy_id = ?", arguments: [policyID])
         for (position, location) in policy.blockedLocations.enumerated() {
             try PolicyBlockedLocationRow(policyID: policyID, position: position, location: location).insert(db)
+        }
+        try db.execute(sql: "DELETE FROM policy_ambient_trusted_location WHERE policy_id = ?", arguments: [policyID])
+        for (position, location) in policy.ambientTrustedLocations.enumerated() {
+            try PolicyAmbientTrustedLocationRow(policyID: policyID, position: position, location: location).insert(db)
         }
     }
 }

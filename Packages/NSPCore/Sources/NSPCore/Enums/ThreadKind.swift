@@ -7,4 +7,9 @@ public enum ThreadKind: String, Sendable, Hashable, Codable, CaseIterable {
     case initiative
     case recurring
     case oneOnOne
+    /// A family/home storyline — added 2026-08-22 for Ambient Mode's
+    /// household use case ("Overheard" recommendation, Phase 2), so a
+    /// family's ambient suggestions land somewhere distinct from work
+    /// threads on My Work rather than mixing into a work Dashboard.
+    case household
 }

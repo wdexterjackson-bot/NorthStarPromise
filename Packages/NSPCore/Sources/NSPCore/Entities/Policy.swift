@@ -12,6 +12,23 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
     public var blockedDomains: [String]
     public var blockedLocations: [String]
 
+    /// Ambient Mode fields (added 2026-08-22, "Overheard" recommendation).
+    /// Default off. `ambientTrustedLocations` mirrors `blockedLocations`'s
+    /// own shape exactly — a plain, user-typed location-label list, not
+    /// backed by real geofencing (no `CoreLocation` integration exists in
+    /// this codebase for either field yet; this is a data placeholder,
+    /// same as `blockedLocations` already is, not a claim of enforcement).
+    /// `ambientModeEnabled` is the workspace's standing permission to use
+    /// the feature at all (surfaced in the onboarding disclosure and a
+    /// Settings toggle) — a live session's own on/off state is transient,
+    /// owned by `AmbientCoordinator`, and never persisted here.
+    public var ambientModeEnabled: Bool
+    public var ambientTrustedLocations: [String]
+    /// 30–150 minutes, 30-minute steps — the Settings picker's range.
+    /// Reaching this limit prompts "Continue Ambient Mode?" rather than
+    /// silently stopping or silently continuing.
+    public var ambientSessionDurationMinutes: Int
+
     public init(
         policyID: PolicyID,
         workspaceID: WorkspaceID,
@@ -19,7 +36,10 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
         defaultProcessingMode: ProcessingMode,
         announcementRequired: Bool = false,
         blockedDomains: [String] = [],
-        blockedLocations: [String] = []
+        blockedLocations: [String] = [],
+        ambientModeEnabled: Bool = false,
+        ambientTrustedLocations: [String] = [],
+        ambientSessionDurationMinutes: Int = 60
     ) {
         self.policyID = policyID
         self.workspaceID = workspaceID
@@ -28,5 +48,8 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
         self.announcementRequired = announcementRequired
         self.blockedDomains = blockedDomains
         self.blockedLocations = blockedLocations
+        self.ambientModeEnabled = ambientModeEnabled
+        self.ambientTrustedLocations = ambientTrustedLocations
+        self.ambientSessionDurationMinutes = ambientSessionDurationMinutes
     }
 }

@@ -50,6 +50,7 @@ public struct AppDatabase: Sendable {
         Migration020AddPersonNotes.self,
         Migration021AddThreadAndProjectPersonJoins.self,
         Migration022CollapseActionReminders.self,
+        Migration023AddAmbientMode.self,
     ]
 
     public static var migrator: DatabaseMigrator {

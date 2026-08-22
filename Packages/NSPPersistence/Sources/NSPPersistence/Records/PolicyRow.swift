@@ -14,6 +14,8 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
     var retentionDays: Int?
     var defaultProcessingMode: String
     var announcementRequired: Bool
+    var ambientModeEnabled: Bool
+    var ambientSessionDurationMinutes: Int
     var createdAt: Date
     var updatedAt: Date
     var rowRevision: Int
@@ -25,6 +27,8 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
         case retentionDays = "retention_days"
         case defaultProcessingMode = "default_processing_mode"
         case announcementRequired = "announcement_required"
+        case ambientModeEnabled = "ambient_mode_enabled"
+        case ambientSessionDurationMinutes = "ambient_session_duration_minutes"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case rowRevision = "row_revision"
@@ -37,13 +41,15 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
         self.retentionDays = policy.retentionDays
         self.defaultProcessingMode = policy.defaultProcessingMode.rawValue
         self.announcementRequired = policy.announcementRequired
+        self.ambientModeEnabled = policy.ambientModeEnabled
+        self.ambientSessionDurationMinutes = policy.ambientSessionDurationMinutes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.rowRevision = rowRevision
         self.cloudRecordChangeTag = cloudRecordChangeTag
     }
 
-    func asDomain(blockedDomains: [String], blockedLocations: [String]) throws -> Policy {
+    func asDomain(blockedDomains: [String], blockedLocations: [String], ambientTrustedLocations: [String]) throws -> Policy {
         guard let policyUUID = UUID(uuidString: policyID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "policy_id", value: policyID)
         }
@@ -63,8 +69,24 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
             defaultProcessingMode: mode,
             announcementRequired: announcementRequired,
             blockedDomains: blockedDomains,
-            blockedLocations: blockedLocations
+            blockedLocations: blockedLocations,
+            ambientModeEnabled: ambientModeEnabled,
+            ambientTrustedLocations: ambientTrustedLocations,
+            ambientSessionDurationMinutes: ambientSessionDurationMinutes
         )
+    }
+}
+
+struct PolicyAmbientTrustedLocationRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "policy_ambient_trusted_location"
+    var policyID: String
+    var position: Int
+    var location: String
+
+    enum CodingKeys: String, CodingKey {
+        case policyID = "policy_id"
+        case position
+        case location
     }
 }
 

@@ -1,4 +1,5 @@
 import NSPActions
+import NSPCore
 import NSPDesignSystem
 import SwiftUI
 
@@ -31,6 +32,8 @@ struct SettingsView: View {
                 }
 
                 calendarSection
+
+                ambientSection
 
                 unconfiguredSection(
                     title: "Capture", symbol: "mic.fill", tint: .red,
@@ -134,6 +137,71 @@ struct SettingsView: View {
         }
         .task {
             if environment.calendarSyncEnabled { await loadCalendars() }
+        }
+    }
+
+    /// Duration options in the picker — 30-minute steps up to 2.5 hours
+    /// (150 min), the locked decision from "Overheard," 2026-08-22.
+    private static let ambientDurationOptionsMinutes = [30, 60, 90, 120, 150]
+
+    /// Ambient Mode's own settings ("Overheard" recommendation, 2026-08-22)
+    /// — visible, opt-in, on-device passive listening. Toggling this on is
+    /// the workspace's standing permission to use the feature at all; a
+    /// live session's own start/stop lives on `AmbientModeView`, reached
+    /// from My Work, not here.
+    private var ambientSection: some View {
+        Section {
+            Toggle(
+                "Ambient Mode",
+                isOn: Binding(
+                    get: { environment.defaultPolicy?.ambientModeEnabled ?? false },
+                    set: { newValue in Task { await setAmbientModeEnabled(newValue) } }))
+            if environment.defaultPolicy?.ambientModeEnabled == true {
+                Picker(
+                    "Session length",
+                    selection: Binding(
+                        get: { environment.defaultPolicy?.ambientSessionDurationMinutes ?? 60 },
+                        set: { newValue in Task { await setAmbientSessionDuration(newValue) } })
+                ) {
+                    ForEach(Self.ambientDurationOptionsMinutes, id: \.self) { minutes in
+                        Text(Self.durationLabel(minutes)).tag(minutes)
+                    }
+                }
+            }
+        } header: {
+            Text("Ambient")
+        } footer: {
+            Text(
+                "Listens for action items and reminders without recording audio or saving a transcript. \"Recording "
+                    + "in Process\" plays out loud whenever a session starts, heard by anyone in the room.")
+        }
+    }
+
+    private static func durationLabel(_ minutes: Int) -> String {
+        minutes < 60 ? "\(minutes) min" : "\(minutes / 60)\(minutes % 60 == 0 ? "" : ".5") hr"
+    }
+
+    private func setAmbientModeEnabled(_ enabled: Bool) async {
+        guard var policy = environment.defaultPolicy else { return }
+        policy.ambientModeEnabled = enabled
+        await savePolicy(policy)
+    }
+
+    private func setAmbientSessionDuration(_ minutes: Int) async {
+        guard var policy = environment.defaultPolicy else { return }
+        policy.ambientSessionDurationMinutes = minutes
+        await savePolicy(policy)
+    }
+
+    private func savePolicy(_ policy: Policy) async {
+        do {
+            try await environment.policyRepository.update(policy, at: environment.clock.now())
+            environment.refreshDefaultPolicy(policy)
+        } catch {
+            // Settings toggles have no dedicated error surface today — a
+            // failed write just leaves the toggle showing the prior,
+            // still-accurate value on next read rather than a silent
+            // false success.
         }
     }
 

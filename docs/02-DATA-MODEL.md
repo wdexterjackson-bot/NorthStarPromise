@@ -319,7 +319,17 @@ writes directly, never AI-generated) · `Workspace` ·
 `AuditEvent` (actor, action, object, payload hash, result, timestamp) ·
 `GlossaryEntry` (term, pronunciation hints, scope, learned-vs-user-entered, inspectable and deletable) ·
 `ShareGrant` (recipient, role, scope, expiry, passcode hash, download policy, revocation state) ·
-`IntegrationReceipt` (destination, external ID, idempotency key, request hash, response, retry history).
+`IntegrationReceipt` (destination, external ID, idempotency key, request hash, response, retry history) ·
+`AmbientSuggestion` (added 2026-08-22, "Overheard" recommendation — kind `.action`/`.decision`, text, optional
+`threadID`/`counterpartyID` match, `AmbientEvidence` — a text excerpt + timestamp, deliberately not an
+audio-backed `EvidenceSpan`, since Ambient Mode keeps no audio or transcript to point back to — and status
+`.pending`/`.accepted`/`.rejected`; accepting one creates a real, freestanding `Action`, never a `Decision`,
+since `Decision.meetingID` above is non-optional by design and Ambient Mode never has one).
+
+`Policy` also carries three Ambient Mode fields (2026-08-22): `ambientModeEnabled`, `ambientTrustedLocations`
+(mirrors `blockedLocations`'s shape — a plain label list, not backed by real geofencing), and
+`ambientSessionDurationMinutes` (30–150, the Settings picker's range). `Person` gained
+`ambientListeningOptOut` — see `docs/06-PRIVACY-AND-SECURITY.md` § 3.5 for the full consent model.
 
 ---
 

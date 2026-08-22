@@ -14,6 +14,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
     var voiceEnrollmentRef: String?
     var contactLink: String?
     var notes: String?
+    var ambientListeningOptOut: Bool
     var createdAt: Date
     var updatedAt: Date
     var rowRevision: Int
@@ -25,6 +26,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         case voiceEnrollmentRef = "voice_enrollment_ref"
         case contactLink = "contact_link"
         case notes
+        case ambientListeningOptOut = "ambient_listening_opt_out"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case rowRevision = "row_revision"
@@ -37,6 +39,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         self.voiceEnrollmentRef = person.voiceEnrollmentRef
         self.contactLink = person.contactLink
         self.notes = person.notes
+        self.ambientListeningOptOut = person.ambientListeningOptOut
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.rowRevision = rowRevision
@@ -52,7 +55,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         return Person(
             personID: PersonID(rawValue: personUUID), workspaceID: WorkspaceID(rawValue: workspaceUUID), name: name,
             aliases: aliases, voiceEnrollmentRef: voiceEnrollmentRef, contactLink: contactLink, tags: tags,
-            notes: notes)
+            notes: notes, ambientListeningOptOut: ambientListeningOptOut)
     }
 }
 

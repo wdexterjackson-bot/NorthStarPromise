@@ -187,6 +187,31 @@ public struct ConsentRecord: Sendable, Codable {
 the type's doc comment and the UI string say exactly that. Method `.none` is a legitimate value and must not be
 styled as an error.
 
+### 3.5 Ambient Mode consent (added 2026-08-22, "Overheard" recommendation)
+
+Ambient Mode has no bounded meeting and no participant roster, so §§ 3.1–3.4 above don't directly apply — there
+is no `ConsentRecord` for a session that never produces a `Meeting`. Its consent model instead:
+
+- **A fixed, audible cue — "Recording in Process" — plays on every session start and every duration-limit
+  renewal**, not a configurable announcement style. This is deliberately the stronger of the phrasings
+  considered: it tells anyone in the room exactly how to treat the moment, whether or not audio ever reaches
+  disk. Never a silent or visual-only start.
+- **A one-time, hard-to-miss disclosure screen** (`AmbientModeDisclosureView`) is required before the feature
+  can be used for the first time — plain language, same "the app cannot determine what is legal for you"
+  posture § 3.1 already takes for recorded meetings, extended to a mode with no bounded roster to check consent
+  against at all.
+- **Default off.** `Policy.ambientModeEnabled` gates the feature at the workspace level; a live session's own
+  duration is capped (`Policy.ambientSessionDurationMinutes`, 30–150 minutes) with an explicit "Continue Ambient
+  Mode?" reprompt at the limit — never a silently-forgotten, indefinitely-running session.
+- **Nothing is ever auto-added.** Every extraction lands in the Ambient Suggestions inbox as a `.pending`
+  `AmbientSuggestion`; accepting it creates a real, freestanding `Action` only after a human confirms it (I6's
+  spirit, extended to this feature's own version of "the world changing").
+- **Not legal advice, flagged explicitly**: real-time processing of a conversation without every party's
+  knowledge is plausibly "recording" under a number of US states' consent statutes even though no audio file is
+  ever written. Broad availability is gated on a real legal review, not a product-code decision alone —
+  `FeatureFlag.ambientMode` exists and is fully wired but stays off pending that review (`docs/09-BACKLOG.md`
+  NSP-161–165).
+
 ---
 
 ## 4. Encryption and key management

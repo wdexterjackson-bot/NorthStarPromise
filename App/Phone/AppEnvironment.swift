@@ -47,6 +47,8 @@ public final class AppEnvironment {
     /// Recurring events (NSP-157).
     public let recurrenceRuleRepository: any RecurrenceRuleRepository
     public let recurrenceExceptionRepository: any RecurrenceExceptionRepository
+    /// Ambient Mode's review inbox ("Overheard", 2026-08-22).
+    public let ambientSuggestionRepository: any AmbientSuggestionRepository
     /// System-suggested threads' dismissal memory (`ThreadsListView`'s
     /// "Suggested" section) — see `ThreadSuggestionDismissalRepository`'s
     /// own doc comment for why the fingerprint is opaque at this layer.
@@ -201,6 +203,7 @@ public final class AppEnvironment {
         (self.recurrenceRuleRepository, self.recurrenceExceptionRepository) = (
             repositories.recurrenceRule, repositories.recurrenceException
         )
+        self.ambientSuggestionRepository = repositories.ambientSuggestion
         self.threadSuggestionDismissalRepository = GRDBThreadSuggestionDismissalRepository(
             dbWriter: appDatabase.dbWriter)
         self.inkAssetFileSystem = LiveInkAssetFileSystem()

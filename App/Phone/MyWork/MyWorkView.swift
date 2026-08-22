@@ -61,6 +61,14 @@ struct MyWorkView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink {
+                        AmbientModeView(environment: environment)
+                    } label: {
+                        Image(systemName: "ear")
+                    }
+                    .accessibilityLabel("Ambient Mode")
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    NavigationLink {
                         WeeklyBriefView(
                             environment: environment, onSelectThread: nil, onSelectPerson: nil)
                     } label: {

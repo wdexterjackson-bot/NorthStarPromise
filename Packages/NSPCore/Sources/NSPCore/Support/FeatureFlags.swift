@@ -33,6 +33,17 @@ public enum FeatureFlag: String, Sendable, CaseIterable, Codable {
     /// timer before it's ready to enable (`CLAUDE.md` §7). Owner: capture
     /// team. Ticket: NSP-149. Remove by: folded in once both spikes clear.
     case scheduledRecording
+
+    /// Ambient Mode — visible, opt-in, on-device passive listening that
+    /// surfaces action-shaped suggestions without ever recording audio
+    /// ("Overheard" recommendation, 2026-08-22). Default off: the "Recording
+    /// in Process" disclosure cue, bounded duration, and Ambient Suggestions
+    /// review inbox all exist and are tested, but broad availability is
+    /// gated on a real legal review of consent-recording statutes — a
+    /// product-code decision alone can't clear that gate. Owner: capture
+    /// team. Ticket: NSP-161–165 (Phase 1), NSP-172–173 (Phase 2). Remove
+    /// by: folded in once the legal review clears.
+    case ambientMode
 }
 
 /// Read-only flag lookup, injected so views and view models never read a

@@ -60,7 +60,9 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: >-
-          North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it.
+          North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it,
+          and — only while you've turned on Ambient Mode — listens for action items and reminders without
+          recording anything.
         NSCalendarsWriteOnlyAccessUsageDescription: >-
           North-Star Promise can add a calendar event for a recording after it ends, if you turn that on in
           Settings.
@@ -68,7 +70,8 @@ targets:
           North-Star Promise can show your calendar events so you can turn one into a scheduled recording.
         NSSpeechRecognitionUsageDescription: >-
           North-Star Promise transcribes your recordings on this device so it can generate a summary and action
-          items.
+          items, and — only while Ambient Mode is on — recognizes speech on-device to suggest action items
+          without keeping a recording or transcript.
         UIAppFonts:
           - InstrumentSerif-Regular.ttf
           - Manrope-Regular.ttf

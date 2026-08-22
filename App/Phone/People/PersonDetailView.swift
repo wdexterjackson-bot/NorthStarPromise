@@ -98,6 +98,7 @@ struct PersonDetailView: View {
                     VStack(alignment: .leading, spacing: NSPSpacing.extraLarge) {
                         tagsSection
                         notesSection
+                        ambientOptOutSection
                         meetingsSection
                         actionSection(title: "What You Owe Them", actions: owedByMeToThem)
                         actionSection(title: "What They Owe You", actions: owedByThemToMe)
@@ -195,6 +196,23 @@ struct PersonDetailView: View {
                 .frame(minHeight: 70)
                 .padding(NSPSpacing.small)
                 .background(Palette.fill, in: .rect(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    /// "Don't transcribe me" — Ambient Mode Phase 2 (People plan, "Overheard"
+    /// recommendation, 2026-08-22). Excludes this person from ambient
+    /// thread/person matching; see `Person.ambientListeningOptOut`'s own
+    /// doc comment for the coarse-enforcement caveat (no real-time speaker
+    /// attribution on the ambient stream yet).
+    @ViewBuilder
+    private var ambientOptOutSection: some View {
+        if let person {
+            Toggle(
+                "Opt out of Ambient Mode",
+                isOn: Binding(
+                    get: { person.ambientListeningOptOut },
+                    set: { newValue in Task { await setAmbientOptOut(newValue) } }))
+            .font(Typo.ui(13, .medium))
         }
     }
 
@@ -328,6 +346,17 @@ struct PersonDetailView: View {
         guard var person else { return }
         let trimmed = notesDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         person.notes = trimmed.isEmpty ? nil : trimmed
+        do {
+            try await environment.personRepository.update(person, at: environment.clock.now())
+            self.person = person
+        } catch {
+            loadError = "\(error)"
+        }
+    }
+
+    private func setAmbientOptOut(_ newValue: Bool) async {
+        guard var person else { return }
+        person.ambientListeningOptOut = newValue
         do {
             try await environment.personRepository.update(person, at: environment.clock.now())
             self.person = person
