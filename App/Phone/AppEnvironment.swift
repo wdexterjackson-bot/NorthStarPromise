@@ -398,15 +398,14 @@ public final class AppEnvironment {
 ///   stay real, open risks, this only makes the feature reachable.
 /// - `.ambientMode`: turned on 2026-08-22 once the user confirmed the
 ///   legal review of consent-recording statutes ("Overheard" recommendation's
-///   own gating condition) had actually completed. This does not resolve
-///   `NSP-163`'s two open risks either — foreground-only (`project.yml`
-///   still declares no `UIBackgroundModes`) and unverified on real
-///   hardware/audio (this environment can't test a live microphone).
-///   Every other gate underneath the flag is unchanged: `Policy
-///   .ambientModeEnabled` still defaults `false` per workspace, the
-///   one-time disclosure still has to be acknowledged, and every session
-///   still starts from an explicit tap — this flag only makes the
-///   already-built, already-opt-in feature reachable at all.
+///   own gating condition) had actually completed. As of 2026-08-22, Exercise
+///   Mode's UI (long-press menu, My Work toolbar, Settings) is no longer
+///   gated behind this flag at all — it's unconditionally reachable, same as
+///   meeting recording. This does not resolve `NSP-163`'s two open risks —
+///   foreground-only (`project.yml` still declares no `UIBackgroundModes`)
+///   and unverified on real hardware/audio (this environment can't test a
+///   live microphone). `Policy.ambientModeEnabled` still defaults `false`
+///   per workspace and every session still starts from an explicit tap.
 private struct HardcodedEnabledFlagsProvider: FeatureFlagProviding {
     private static let enabledFlags: Set<FeatureFlag> = [.scheduledRecording, .ambientMode]
 

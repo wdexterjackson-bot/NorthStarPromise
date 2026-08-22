@@ -39,8 +39,7 @@ struct PadDashboardSidebar: View {
     let onStartNotesOnly: () -> Void
     let onStartMentalNote: () -> Void
     let onImportAudio: () -> Void
-    /// `nil` when `FeatureFlag.ambientMode` is off.
-    let onStartAmbientMode: (() -> Void)?
+    let onStartAmbientMode: () -> Void
     let onAddAgendaItem: () -> Void
     let onStartScheduledRecording: (ScheduledRecording) -> Void
     let onModifyScheduledRecording: (ScheduledRecording, PadAgendaRowView.RecurrenceEditScope?) -> Void

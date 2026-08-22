@@ -89,8 +89,7 @@ struct DashboardView: View {
                         openToday()
                     },
                     onImportAudio: { isShowingAudioImportPicker = true },
-                    onStartAmbientMode: environment.featureFlagProvider.isEnabled(.ambientMode)
-                        ? { isShowingAmbientMode = true } : nil
+                    onStartAmbientMode: { isShowingAmbientMode = true }
                 )
                 .padding(.trailing, 20)
                 .padding(.bottom, 100)

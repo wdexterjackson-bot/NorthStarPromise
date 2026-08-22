@@ -387,8 +387,7 @@ struct PadRootView: View {
                     Task { await recordingSession.startBrainDump() }
                     selectedArea = .today
                 }, onImportAudio: { isShowingAudioImportPicker = true },
-                onStartAmbientMode: environment.featureFlagProvider.isEnabled(.ambientMode)
-                    ? { isShowingAmbientMode = true } : nil,
+                onStartAmbientMode: { isShowingAmbientMode = true },
                 onAddAgendaItem: { agendaSheet = .create },
                 onStartScheduledRecording: { item in Task { await startScheduledRecording(item) } },
                 onModifyScheduledRecording: { item, scope in Task { await modifyScheduledRecording(item, scope: scope) } },
