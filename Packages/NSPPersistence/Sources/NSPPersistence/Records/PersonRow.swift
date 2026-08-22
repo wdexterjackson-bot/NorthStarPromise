@@ -11,6 +11,8 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
     var personID: String
     var workspaceID: String
     var name: String
+    var role: String?
+    var organization: String?
     var voiceEnrollmentRef: String?
     var contactLink: String?
     var notes: String?
@@ -23,6 +25,8 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         case personID = "person_id"
         case workspaceID = "workspace_id"
         case name
+        case role
+        case organization
         case voiceEnrollmentRef = "voice_enrollment_ref"
         case contactLink = "contact_link"
         case notes
@@ -36,6 +40,8 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         self.personID = person.personID.rawValue.uuidString
         self.workspaceID = person.workspaceID.rawValue.uuidString
         self.name = person.name
+        self.role = person.role
+        self.organization = person.organization
         self.voiceEnrollmentRef = person.voiceEnrollmentRef
         self.contactLink = person.contactLink
         self.notes = person.notes
@@ -54,8 +60,8 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         }
         return Person(
             personID: PersonID(rawValue: personUUID), workspaceID: WorkspaceID(rawValue: workspaceUUID), name: name,
-            aliases: aliases, voiceEnrollmentRef: voiceEnrollmentRef, contactLink: contactLink, tags: tags,
-            notes: notes, ambientListeningOptOut: ambientListeningOptOut)
+            aliases: aliases, role: role, organization: organization, voiceEnrollmentRef: voiceEnrollmentRef,
+            contactLink: contactLink, tags: tags, notes: notes, ambientListeningOptOut: ambientListeningOptOut)
     }
 }
 

@@ -18,6 +18,15 @@ struct ExhaustiveSwitchContentTests {
         }
     }
 
+    @Test func test_onboardingState_allCasesSwitchExhaustively() {
+        for state in OnboardingState.allCases {
+            switch state {
+            case .notStarted, .inProgress, .skipped, .completed:
+                continue
+            }
+        }
+    }
+
     @Test func test_blockPrivacy_allCasesSwitchExhaustively() {
         for value in BlockPrivacy.allCases {
             switch value {

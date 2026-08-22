@@ -88,6 +88,8 @@ struct RootView: View {
     /// cram the sidebar shell into that width.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
+    @State private var isShowingGettingStarted = false
+
     var body: some View {
         Group {
             if UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass != .compact {
@@ -100,6 +102,21 @@ struct RootView: View {
         // OS setting everywhere in the app rather than screen-by-screen
         // (`AppEnvironment.appearanceMode`'s own doc comment).
         .preferredColorScheme(environment.appearanceMode.colorScheme)
+        // "The First Hour" wizard auto-presents exactly once, only from
+        // `.notStarted` (`OnboardingState.shouldAutoPresent`) — strictly
+        // after the mandatory legal disclosure and permission sequence
+        // (docs/06 §3.1, docs/07 §12), which both happen before `RootView`
+        // ever mounts. Fully skippable and reachable again from Settings.
+        .task {
+            if environment.featureFlagProvider.isEnabled(.gettingStartedWizard),
+                environment.defaultPolicy?.onboardingState.shouldAutoPresent == true
+            {
+                isShowingGettingStarted = true
+            }
+        }
+        .fullScreenCover(isPresented: $isShowingGettingStarted) {
+            GettingStartedWizardView(environment: environment, onDone: { isShowingGettingStarted = false })
+        }
     }
 }
 

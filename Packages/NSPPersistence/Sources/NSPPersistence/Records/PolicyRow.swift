@@ -16,6 +16,8 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
     var announcementRequired: Bool
     var ambientModeEnabled: Bool
     var ambientSessionDurationMinutes: Int
+    var onboardingState: String
+    var onboardingLastStepIndex: Int
     var createdAt: Date
     var updatedAt: Date
     var rowRevision: Int
@@ -29,6 +31,8 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
         case announcementRequired = "announcement_required"
         case ambientModeEnabled = "ambient_mode_enabled"
         case ambientSessionDurationMinutes = "ambient_session_duration_minutes"
+        case onboardingState = "onboarding_state"
+        case onboardingLastStepIndex = "onboarding_last_step_index"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case rowRevision = "row_revision"
@@ -43,6 +47,8 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
         self.announcementRequired = policy.announcementRequired
         self.ambientModeEnabled = policy.ambientModeEnabled
         self.ambientSessionDurationMinutes = policy.ambientSessionDurationMinutes
+        self.onboardingState = policy.onboardingState.rawValue
+        self.onboardingLastStepIndex = policy.onboardingLastStepIndex
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.rowRevision = rowRevision
@@ -61,6 +67,10 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
             throw PersistenceError.corruptRow(
                 table: Self.databaseTableName, column: "default_processing_mode", value: defaultProcessingMode)
         }
+        guard let resolvedOnboardingState = OnboardingState(rawValue: onboardingState) else {
+            throw PersistenceError.corruptRow(
+                table: Self.databaseTableName, column: "onboarding_state", value: onboardingState)
+        }
 
         return Policy(
             policyID: PolicyID(rawValue: policyUUID),
@@ -72,7 +82,9 @@ struct PolicyRow: Codable, FetchableRecord, PersistableRecord {
             blockedLocations: blockedLocations,
             ambientModeEnabled: ambientModeEnabled,
             ambientTrustedLocations: ambientTrustedLocations,
-            ambientSessionDurationMinutes: ambientSessionDurationMinutes
+            ambientSessionDurationMinutes: ambientSessionDurationMinutes,
+            onboardingState: resolvedOnboardingState,
+            onboardingLastStepIndex: onboardingLastStepIndex
         )
     }
 }

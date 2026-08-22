@@ -6,6 +6,11 @@ import NSPCore
 /// touching a real database (docs/11 §4).
 public protocol WorkspaceRepository: Sendable {
     func insert(_ workspace: Workspace, at date: Date) async throws
+    /// Renames the workspace — added for "The First Hour" wizard's
+    /// identity step (2026-08-22); `memberPersonIDs` is never written
+    /// here, since it's always derived from `person.workspace_id`
+    /// (`find`'s own doc comment), not a real stored column.
+    func update(_ workspace: Workspace, at date: Date) async throws
     func find(_ id: WorkspaceID) async throws -> Workspace?
 }
 
@@ -20,6 +25,19 @@ public struct GRDBWorkspaceRepository: WorkspaceRepository {
         let row = WorkspaceRow(workspace: workspace, createdAt: date, updatedAt: date, rowRevision: 1)
         try await dbWriter.write { db in
             try row.insert(db)
+        }
+    }
+
+    public func update(_ workspace: Workspace, at date: Date) async throws {
+        let id = workspace.workspaceID.rawValue.uuidString
+        try await dbWriter.write { db in
+            guard let existing = try WorkspaceRow.fetchOne(db, key: id) else {
+                throw PersistenceError.notFound(table: WorkspaceRow.databaseTableName, key: id)
+            }
+            let updated = WorkspaceRow(
+                workspace: workspace, createdAt: existing.createdAt, updatedAt: date,
+                rowRevision: existing.rowRevision + 1)
+            try updated.update(db)
         }
     }
 

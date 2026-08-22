@@ -8,6 +8,18 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
 
     public var name: String
     public var aliases: [String]
+    /// Freeform job title ("VP Sales," "Chief of Staff") — added for "The
+    /// First Hour" wizard (2026-08-22), which asks for it on the self-Person
+    /// in step 1, but it's a general field any Person can carry, shown on
+    /// People/Thread/Project detail screens too. Never required.
+    public var role: String?
+    /// Freeform employer/org name ("Acme Inc," "Board of Directors") — same
+    /// wizard, same "helps but never required" status as `role`. Kept
+    /// separate from `tags` deliberately: `tags` describes this person's
+    /// *relationship* to the workspace owner ("Vendor," "Board"), while
+    /// `organization` is a fact about the person themselves, independent of
+    /// that relationship.
+    public var organization: String?
     public var voiceEnrollmentRef: String?
     public var contactLink: String?
     /// Freeform relationship labels ("Direct report", "Board", "Vendor") —
@@ -35,6 +47,8 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
         workspaceID: WorkspaceID,
         name: String,
         aliases: [String] = [],
+        role: String? = nil,
+        organization: String? = nil,
         voiceEnrollmentRef: String? = nil,
         contactLink: String? = nil,
         tags: [String] = [],
@@ -45,6 +59,8 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
         self.workspaceID = workspaceID
         self.name = name
         self.aliases = aliases
+        self.role = role
+        self.organization = organization
         self.voiceEnrollmentRef = voiceEnrollmentRef
         self.contactLink = contactLink
         self.tags = tags

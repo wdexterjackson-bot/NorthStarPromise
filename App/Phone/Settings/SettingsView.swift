@@ -15,11 +15,17 @@ struct SettingsView: View {
     @State private var calendars: [CalendarInfo] = []
     @State private var isLoadingCalendars = false
     @State private var calendarAccessDenied = false
+    @State private var isShowingGettingStarted = false
+    @State private var isShowingFollowUp = false
 
     var body: some View {
         NavigationStack {
             List {
                 appearanceSection
+
+                if environment.featureFlagProvider.isEnabled(.gettingStartedWizard) {
+                    gettingStartedSection
+                }
 
                 Section("Processing") {
                     settingsRow(symbol: "cpu", tint: .blue, title: "Default processing mode") {
@@ -62,6 +68,12 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Settings")
+            .fullScreenCover(isPresented: $isShowingGettingStarted) {
+                GettingStartedWizardView(environment: environment, onDone: { isShowingGettingStarted = false })
+            }
+            .sheet(isPresented: $isShowingFollowUp) {
+                FollowUpWizardView(environment: environment, onDone: { isShowingFollowUp = false })
+            }
         }
     }
 
@@ -152,6 +164,55 @@ struct SettingsView: View {
     /// permission to use the feature at all; a live session's own
     /// start/stop lives on `AmbientModeView`, reached from the capture
     /// button's long-press menu or My Work, not here.
+    /// "The First Hour" wizard's own Settings entry (2026-08-22). Two
+    /// distinct rows on purpose: the first-run flow itself (label changes
+    /// with `onboardingState` — "Get Started" before it's ever run,
+    /// "Continue Getting Started" mid-way, "Redo Getting Started" once
+    /// done), and — only once it's actually been completed — "Talk to
+    /// your assistant again," the lighter follow-up session the user asks
+    /// for by name. This row, plus its footer copy, is the one place a
+    /// user is explicitly told the follow-up exists and how to start it —
+    /// there's no other affordance for it anywhere else in the app.
+    private var gettingStartedSection: some View {
+        Section {
+            Button {
+                isShowingGettingStarted = true
+            } label: {
+                settingsRow(symbol: "hand.wave.fill", tint: .orange, title: gettingStartedRowTitle) {
+                    Image(systemName: "chevron.right").foregroundStyle(Palette.textQuaternary)
+                }
+            }
+            .buttonStyle(.plain)
+
+            if environment.defaultPolicy?.onboardingState == .completed {
+                Button {
+                    isShowingFollowUp = true
+                } label: {
+                    settingsRow(symbol: "bubble.left.and.bubble.right.fill", tint: .purple, title: "Talk to Your Assistant Again") {
+                        Image(systemName: "chevron.right").foregroundStyle(Palette.textQuaternary)
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        } header: {
+            Text("Getting Started")
+        } footer: {
+            Text(
+                environment.defaultPolicy?.onboardingState == .completed
+                    ? "Add more Threads, People, or upcoming meetings anytime with a quick check-in — you pick "
+                        + "what to go over."
+                    : "A short, skippable setup that helps me learn who and what matters to you.")
+        }
+    }
+
+    private var gettingStartedRowTitle: String {
+        switch environment.defaultPolicy?.onboardingState {
+        case .completed: "Redo Getting Started"
+        case .inProgress: "Continue Getting Started"
+        case .skipped, .notStarted, nil: "Get Started"
+        }
+    }
+
     private var ambientSection: some View {
         Section {
             Toggle(

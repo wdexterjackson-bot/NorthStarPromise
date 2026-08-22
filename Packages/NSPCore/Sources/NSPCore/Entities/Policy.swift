@@ -29,6 +29,15 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
     /// silently stopping or silently continuing.
     public var ambientSessionDurationMinutes: Int
 
+    /// "The First Hour" wizard's own progress (2026-08-22) — see
+    /// `OnboardingState`'s own doc comment for the state machine this
+    /// drives. Workspace-scoped, like every other `Policy` field.
+    public var onboardingState: OnboardingState
+    /// Which wizard step to resume on — only meaningful while
+    /// `onboardingState == .inProgress`; ignored otherwise. `0`-indexed,
+    /// matching `GettingStartedCoordinator.Step.allCases`' own ordering.
+    public var onboardingLastStepIndex: Int
+
     public init(
         policyID: PolicyID,
         workspaceID: WorkspaceID,
@@ -39,7 +48,9 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
         blockedLocations: [String] = [],
         ambientModeEnabled: Bool = false,
         ambientTrustedLocations: [String] = [],
-        ambientSessionDurationMinutes: Int = 60
+        ambientSessionDurationMinutes: Int = 60,
+        onboardingState: OnboardingState = .notStarted,
+        onboardingLastStepIndex: Int = 0
     ) {
         self.policyID = policyID
         self.workspaceID = workspaceID
@@ -51,5 +62,7 @@ public struct Policy: Sendable, Hashable, Codable, Identifiable {
         self.ambientModeEnabled = ambientModeEnabled
         self.ambientTrustedLocations = ambientTrustedLocations
         self.ambientSessionDurationMinutes = ambientSessionDurationMinutes
+        self.onboardingState = onboardingState
+        self.onboardingLastStepIndex = onboardingLastStepIndex
     }
 }

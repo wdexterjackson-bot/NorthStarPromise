@@ -44,6 +44,13 @@ public enum FeatureFlag: String, Sendable, CaseIterable, Codable {
     /// team. Ticket: NSP-161–165 (Phase 1), NSP-172–173 (Phase 2). Remove
     /// by: folded in once the legal review clears.
     case ambientMode
+
+    /// "The First Hour" — the skippable, resumable Getting Started wizard
+    /// that seeds Threads/People/Projects on first launch and offers a
+    /// lighter follow-up session afterward. Default off during
+    /// development. Owner: capture team. Ticket: NSP-176–181. Remove by:
+    /// folded in once Phase 5 lands.
+    case gettingStartedWizard
 }
 
 /// Read-only flag lookup, injected so views and view models never read a

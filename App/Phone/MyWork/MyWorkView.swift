@@ -17,6 +17,7 @@ struct MyWorkView: View {
 
     @State private var cards: [ThreadWorkCard] = []
     @State private var loadError: String?
+    @State private var isShowingFollowUp = false
 
     struct ThreadWorkCard: Identifiable {
         let thread: NSPThread
@@ -59,6 +60,22 @@ struct MyWorkView: View {
             }
             .navigationTitle("My Work")
             .toolbar {
+                // "The First Hour"'s follow-up entry point — only once the
+                // first-run wizard has actually completed, so this never
+                // competes with `RootView`'s own auto-presented first
+                // session (2026-08-22).
+                if environment.featureFlagProvider.isEnabled(.gettingStartedWizard),
+                    environment.defaultPolicy?.onboardingState == .completed
+                {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button {
+                            isShowingFollowUp = true
+                        } label: {
+                            Image(systemName: "bubble.left.and.bubble.right.fill")
+                        }
+                        .accessibilityLabel("Talk to Your Assistant Again")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink {
                         AmbientModeView(environment: environment)
@@ -76,6 +93,9 @@ struct MyWorkView: View {
                     }
                     .accessibilityLabel("Weekly Brief")
                 }
+            }
+            .sheet(isPresented: $isShowingFollowUp) {
+                FollowUpWizardView(environment: environment, onDone: { isShowingFollowUp = false })
             }
             .task { await load() }
             .onChange(of: environment.contentRevision) { _, _ in Task { await load() } }

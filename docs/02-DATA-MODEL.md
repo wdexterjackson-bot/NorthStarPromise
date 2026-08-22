@@ -310,10 +310,12 @@ evidence is shown as such; it never silently disappears.
 
 ### Supporting entities
 
-`Person` (name, aliases, voice enrollment ref, contact link, workspace scope, plus two 2026-08-22 additions:
+`Person` (name, aliases, voice enrollment ref, contact link, workspace scope, plus 2026-08-22 additions:
 `tags: [String]` — freeform relationship labels ("Direct report", "Board", "Vendor"), deliberately not an enum
-since an executive's roster doesn't fit one fixed taxonomy, and `notes: String?` — freeform context the user
-writes directly, never AI-generated) · `Workspace` ·
+since an executive's roster doesn't fit one fixed taxonomy; `notes: String?` — freeform context the user
+writes directly, never AI-generated; and `role: String?` / `organization: String?` — freeform job title and
+employer, added for "The First Hour" wizard's identity step but usable on any Person, never required) ·
+`Workspace` ·
 `Policy` (retention, processing scope, announcement requirement, domain/location rules) ·
 `ConsentRecord` (method, timestamp, participants acknowledged) ·
 `AuditEvent` (actor, action, object, payload hash, result, timestamp) ·
@@ -330,6 +332,11 @@ since `Decision.meetingID` above is non-optional by design and Ambient Mode neve
 (mirrors `blockedLocations`'s shape — a plain label list, not backed by real geofencing), and
 `ambientSessionDurationMinutes` (30–150, the Settings picker's range). `Person` gained
 `ambientListeningOptOut` — see `docs/06-PRIVACY-AND-SECURITY.md` § 3.5 for the full consent model.
+
+`Policy` also carries "The First Hour" wizard's own progress (2026-08-22, NSP-176): `onboardingState`
+(`OnboardingState`: `.notStarted / .inProgress / .skipped / .completed` — only `.notStarted` auto-presents the
+wizard, only `.inProgress` resumes an existing session rather than restarting from step 0) and
+`onboardingLastStepIndex` (`Int`, `GettingStartedCoordinator.Step`'s raw value to resume on).
 
 ---
 
