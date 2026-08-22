@@ -105,7 +105,10 @@ quota and account-state error surfacing, key-reset handling.
 Protocols — `TranscriberProtocol`, `DiarizerProtocol`, `SummarizerProtocol`, `RetrieverProtocol`,
 `EmbedderProtocol` — plus on-device implementations, a `MockX` for each in `NSPTestSupport`, evidence binding
 and verification (`EvidenceResolver`, `EntailmentChecker`), prompt/template versioning, correction memory, and
-the alignment job that maps provisional artifacts to canonical timestamps.
+the alignment job that maps provisional artifacts to canonical timestamps. Also home to `DashboardComposer`
+(assembles `DashboardModel` from live repositories) and, added 2026-08-22, `RelationshipGraph` — one shared
+"everything tied to this Person/Thread/Project" read layer every screen queries through instead of writing its
+own joins — and `WeeklyBriefComposer`, the Monday-morning digest built on top of it.
 
 ### `NSPBackendClient`
 Typed client for the processing plane. Every method takes a `ProcessingGrant` obtained from `NSPPolicy`; there

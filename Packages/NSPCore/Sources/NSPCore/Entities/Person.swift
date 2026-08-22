@@ -10,6 +10,15 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
     public var aliases: [String]
     public var voiceEnrollmentRef: String?
     public var contactLink: String?
+    /// Freeform relationship labels ("Direct report", "Board", "Vendor") —
+    /// deliberately not an enum. An executive's roster doesn't fit one
+    /// fixed taxonomy (People recommendation, 2026-08-22).
+    public var tags: [String]
+    /// Freeform context the user writes about this person directly —
+    /// "prefers async updates", "reports to Dana" — never AI-generated, so
+    /// it carries no `EvidenceSpan` (Invariant I4 doesn't apply; same
+    /// reasoning as a manually-created `Action`).
+    public var notes: String?
 
     public init(
         personID: PersonID,
@@ -17,7 +26,9 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
         name: String,
         aliases: [String] = [],
         voiceEnrollmentRef: String? = nil,
-        contactLink: String? = nil
+        contactLink: String? = nil,
+        tags: [String] = [],
+        notes: String? = nil
     ) {
         self.personID = personID
         self.workspaceID = workspaceID
@@ -25,5 +36,7 @@ public struct Person: Sendable, Hashable, Codable, Identifiable {
         self.aliases = aliases
         self.voiceEnrollmentRef = voiceEnrollmentRef
         self.contactLink = contactLink
+        self.tags = tags
+        self.notes = notes
     }
 }

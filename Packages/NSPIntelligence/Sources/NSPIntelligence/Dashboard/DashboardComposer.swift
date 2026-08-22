@@ -97,6 +97,7 @@ public enum DashboardComposer {
             threads: threads, meetingIDsByThread: meetingIDsByThread, derivedStatuses: derivedStatuses)
         let needsYou = makeNeedsYou(
             openActions: openActions, allMeetings: allMeetings, threadsByID: threadsByID, now: now)
+        let signals = makeSignals(threads: threads, derivedStatuses: derivedStatuses, now: now)
         let capturedToday = makeCapturedToday(
             todaysMeetings: todaysMeetings, threadIDsByMeeting: threadIDsByMeeting, threadsByID: threadsByID)
 
@@ -107,7 +108,7 @@ public enum DashboardComposer {
 
         return DashboardModel(
             date: now, headline: headline, corpusCount: allMeetings.count, agenda: agenda, nextUp: nextUp,
-            threadsInMotion: threadCards, needsYou: needsYou, signals: [], capturedToday: capturedToday,
+            threadsInMotion: threadCards, needsYou: needsYou, signals: signals, capturedToday: capturedToday,
             navCounts: NavCounts(
                 todayMeetings: agenda.count, openThreads: openThreadCount,
                 openActionsIOwe: openActions.filter { $0.direction == .iOwe }.count, libraryTotal: allMeetings.count))
@@ -128,7 +129,8 @@ public enum DashboardComposer {
         return AgendaItem(
             meetingID: meeting.meetingID, start: meeting.startedAt, end: meeting.endedAt ?? meeting.startedAt,
             title: meeting.isTitleSensitive || meeting.title.isEmpty ? "Untitled meeting" : meeting.title,
-            thread: threadRef, state: state, recapReady: recapReady, continuityFact: fact)
+            thread: threadRef, state: state, recapReady: recapReady, continuityFact: fact,
+            colorSlot: meeting.colorSlot, kind: meeting.kind, recurrenceRuleID: meeting.recurrenceRuleID)
     }
 
     private static func rowState(for meeting: Meeting, todaysMeetings: [Meeting], now: Date) -> AgendaRowState {
@@ -163,6 +165,10 @@ public enum DashboardComposer {
     private static func continuityFact(
         meeting: Meeting, facts: AgendaRowFacts, openActions: [Action], now: Date
     ) -> String {
+        switch meeting.kind {
+        case .notesOnly: return "Meeting with Notes"
+        case .recorded: break
+        }
         if facts.state == .past, facts.recapReady { return "Recap ready" }
         if facts.state == .next {
             let minutes = max(0, Int(meeting.startedAt.timeIntervalSince(now) / 60))
@@ -235,6 +241,32 @@ public enum DashboardComposer {
                 statusChipLabel: label, isOverdue: actionAge > 0)
         }
         return NeedsYou(items: Array(items), openCount: owed.count, overdueCount: overdue.count)
+    }
+
+    /// A thread that's gone quiet — no meeting, decision, or action touch
+    /// in 14+ days — surfaced as a `.dormantThread` signal ("The Spine"
+    /// recommendation, 2026-08-22: this field existed but nothing ever
+    /// populated it). Same 14-day threshold `WeeklyBriefComposer` uses for
+    /// its own "threads gone quiet" section, so the two never disagree
+    /// about what counts as quiet.
+    private static let dormantThreshold: TimeInterval = 14 * 86400
+
+    private static func makeSignals(
+        threads: [NSPThread], derivedStatuses: [NSPThreadID: NSPThreadStatus], now: Date
+    ) -> [DashboardSignal] {
+        threads
+            .filter { (derivedStatuses[$0.threadID] ?? $0.status) != .closed }
+            .compactMap { thread -> (quietDays: Int, signal: DashboardSignal)? in
+                let quietSeconds = now.timeIntervalSince(thread.lastTouchedAt)
+                guard quietSeconds >= dormantThreshold else { return nil }
+                let quietDays = Int(quietSeconds / 86400)
+                let signal = DashboardSignal(
+                    kind: .dormantThread, severity: quietDays >= 30 ? .high : .normal,
+                    leadClause: "\(thread.title) has gone quiet", body: "No activity in \(quietDays) days")
+                return (quietDays, signal)
+            }
+            .sorted { $0.quietDays > $1.quietDays }
+            .map(\.signal)
     }
 
     /// A meeting-tied action names its meeting; a freestanding one names

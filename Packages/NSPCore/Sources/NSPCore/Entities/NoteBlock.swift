@@ -61,3 +61,15 @@ public struct NoteBlock: Sendable, Hashable, Codable, Identifiable {
         self.opLog = opLog
     }
 }
+
+extension Sequence where Element == NoteBlock {
+    /// Every block safe to leave the device in a share or export — the
+    /// single enforcement point NSP-105 calls for ("excluded from every
+    /// share and export path by default; the exclusion is enforced in the
+    /// export code, not the UI"). No export/share feature assembles
+    /// `NoteBlock`s together yet (`MeetingDetailView.Tab.sharing` is still
+    /// an empty placeholder) — whichever feature builds that first must
+    /// filter through this rather than re-deriving the `.shared` check
+    /// inline, so the exclusion can never drift between call sites.
+    public var shareable: [NoteBlock] { filter { $0.privacy == .shared } }
+}

@@ -13,6 +13,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
     var name: String
     var voiceEnrollmentRef: String?
     var contactLink: String?
+    var notes: String?
     var createdAt: Date
     var updatedAt: Date
     var rowRevision: Int
@@ -23,6 +24,7 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         case name
         case voiceEnrollmentRef = "voice_enrollment_ref"
         case contactLink = "contact_link"
+        case notes
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case rowRevision = "row_revision"
@@ -34,12 +36,13 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         self.name = person.name
         self.voiceEnrollmentRef = person.voiceEnrollmentRef
         self.contactLink = person.contactLink
+        self.notes = person.notes
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.rowRevision = rowRevision
     }
 
-    func asDomain(aliases: [String]) throws -> Person {
+    func asDomain(aliases: [String], tags: [String]) throws -> Person {
         guard let personUUID = UUID(uuidString: personID) else {
             throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "person_id", value: personID)
         }
@@ -48,7 +51,25 @@ struct PersonRow: Codable, FetchableRecord, PersistableRecord {
         }
         return Person(
             personID: PersonID(rawValue: personUUID), workspaceID: WorkspaceID(rawValue: workspaceUUID), name: name,
-            aliases: aliases, voiceEnrollmentRef: voiceEnrollmentRef, contactLink: contactLink)
+            aliases: aliases, voiceEnrollmentRef: voiceEnrollmentRef, contactLink: contactLink, tags: tags,
+            notes: notes)
+    }
+}
+
+/// Mirrors the `person_tag` table — one row per `Person.tags` entry,
+/// ordered by `position`. Same "row owns its own columns, repository owns
+/// the join" split `person_alias` uses.
+struct PersonTagRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "person_tag"
+
+    var personID: String
+    var position: Int
+    var tag: String
+
+    enum CodingKeys: String, CodingKey {
+        case personID = "person_id"
+        case position
+        case tag
     }
 }
 

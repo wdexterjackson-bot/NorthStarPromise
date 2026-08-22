@@ -1,5 +1,6 @@
 import NSPCore
 import NSPDesignSystem
+import PencilKit
 import SwiftUI
 
 /// docs/07 §4's Notes tab: a real `NoteBlock` list backed by
@@ -10,6 +11,12 @@ import SwiftUI
 struct NotesTab: View {
     let meeting: Meeting
     let environment: AppEnvironment
+    /// Shared with `AudioTab`/`TranscriptTab` (`MeetingDetailView`'s own
+    /// doc comment: one player, every tab seeks the same absolute position)
+    /// — lets a `.sketch` block's ink seek the recording to when it was
+    /// drawn (NSP-102, tap-a-stroke-to-seek).
+    let playback: AudioPlaybackController
+    let compositeAudioURL: URL?
 
     @State private var blocks: [NoteBlock] = []
     @State private var loadError: String?
@@ -54,7 +61,8 @@ struct NotesTab: View {
                 VStack(alignment: .leading, spacing: NSPSpacing.medium) {
                     ForEach(sortedBlocks) { block in
                         NoteBlockRowView(
-                            block: block, onEdit: { composerTarget = .editing(block) },
+                            block: block, meeting: meeting, environment: environment, playback: playback,
+                            compositeAudioURL: compositeAudioURL, onEdit: { composerTarget = .editing(block) },
                             onDelete: {
                                 Task { await delete(block) }
                             })
@@ -105,8 +113,17 @@ struct NotesTab: View {
 /// works on list rows).
 private struct NoteBlockRowView: View {
     let block: NoteBlock
+    let meeting: Meeting
+    let environment: AppEnvironment
+    let playback: AudioPlaybackController
+    let compositeAudioURL: URL?
     let onEdit: () -> Void
     let onDelete: () -> Void
+
+    @State private var inkImage: Image?
+    @State private var inkLoadFailed = false
+
+    private var isSketch: Bool { block.type == .sketch }
 
     private var previewText: String {
         switch block.content {
@@ -135,7 +152,11 @@ private struct NoteBlockRowView: View {
                             .foregroundStyle(Palette.textTertiary)
                     }
                 }
-                Text(previewText).font(Typo.ui(14, .medium))
+                if isSketch {
+                    sketchPreview
+                } else {
+                    Text(previewText).font(Typo.ui(14, .medium))
+                }
             }
 
             Spacer(minLength: 0)
@@ -153,6 +174,60 @@ private struct NoteBlockRowView: View {
         .nspCard()
         .contentShape(Rectangle())
         .onTapGesture { if canEdit { onEdit() } }
+    }
+
+    /// A static render of the stroke group, tapping it seeks the shared
+    /// player to `creationRange.startSample` — the "tap-a-stroke-to-seek"
+    /// half of NOT-002's acceptance (NSP-102). The reverse direction
+    /// (transcript turn → nearby notes) isn't wired yet.
+    @ViewBuilder
+    private var sketchPreview: some View {
+        if let inkImage {
+            inkImage
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 140)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Palette.fill, in: .rect(cornerRadius: 8, style: .continuous))
+                .contentShape(Rectangle())
+                .onTapGesture { seekToNote() }
+                .accessibilityLabel("Sketch — tap to play the recording from when this was drawn")
+                .accessibilityAddTraits(.isButton)
+        } else if inkLoadFailed {
+            Text(previewText).font(Typo.ui(14, .medium)).foregroundStyle(Palette.textTertiary)
+        } else {
+            ProgressView().frame(height: 60).frame(maxWidth: .infinity, alignment: .leading)
+                .task { await loadInkImage() }
+        }
+    }
+
+    private func loadInkImage() async {
+        guard case .assetReference(let path) = block.content else {
+            inkLoadFailed = true
+            return
+        }
+        do {
+            let container = try environment.makeMeetingContainer(meetingID: meeting.meetingID)
+            let url = container.rootURL.appendingPathComponent(path)
+            let data = try environment.inkAssetFileSystem.read(from: url)
+            let drawing = try PKDrawing(data: data)
+            let bounds = drawing.bounds.insetBy(dx: -12, dy: -12)
+            guard !bounds.isEmpty else {
+                inkLoadFailed = true
+                return
+            }
+            let rendered = drawing.image(from: bounds, scale: 2)
+            inkImage = Image(uiImage: rendered)
+        } catch {
+            inkLoadFailed = true
+        }
+    }
+
+    private func seekToNote() {
+        guard let compositeAudioURL, meeting.canonicalDuration.sampleRate > 0 else { return }
+        let offsetSeconds =
+            TimeInterval(block.creationRange.startSample) / TimeInterval(meeting.canonicalDuration.sampleRate)
+        playback.play(fileURL: compositeAudioURL, fromOffsetSeconds: offsetSeconds)
     }
 }
 

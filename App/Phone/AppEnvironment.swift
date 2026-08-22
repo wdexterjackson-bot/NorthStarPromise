@@ -38,8 +38,15 @@ public final class AppEnvironment {
     /// for how the two independent groupings differ.
     public let meetingAttendeeRepository: any MeetingAttendeeRepository
     public let threadRepository: any NSPThreadRepository
+    /// People plan phase 2 (2026-08-22): tracking who's relevant to a
+    /// Thread/Project beyond meeting attendance.
+    public let threadParticipantRepository: any ThreadParticipantRepository
+    public let projectPersonRepository: any ProjectPersonRepository
     public let brainDumpRepository: any BrainDumpRepository
     public let noteRepository: any NoteRepository
+    /// Recurring events (NSP-157).
+    public let recurrenceRuleRepository: any RecurrenceRuleRepository
+    public let recurrenceExceptionRepository: any RecurrenceExceptionRepository
     /// System-suggested threads' dismissal memory (`ThreadsListView`'s
     /// "Suggested" section) — see `ThreadSuggestionDismissalRepository`'s
     /// own doc comment for why the fingerprint is opaque at this layer.
@@ -187,7 +194,13 @@ public final class AppEnvironment {
         self.scheduledRecordingRepository = repositories.scheduledRecording
         (self.projectRepository, self.decisionRepository) = (repositories.project, repositories.decision)
         (self.meetingAttendeeRepository, self.threadRepository) = (repositories.meetingAttendee, repositories.thread)
+        (self.threadParticipantRepository, self.projectPersonRepository) = (
+            repositories.threadParticipant, repositories.projectPerson
+        )
         (self.brainDumpRepository, self.noteRepository) = (repositories.brainDump, repositories.note)
+        (self.recurrenceRuleRepository, self.recurrenceExceptionRepository) = (
+            repositories.recurrenceRule, repositories.recurrenceException
+        )
         self.threadSuggestionDismissalRepository = GRDBThreadSuggestionDismissalRepository(
             dbWriter: appDatabase.dbWriter)
         self.inkAssetFileSystem = LiveInkAssetFileSystem()
@@ -324,6 +337,24 @@ public final class AppEnvironment {
             meeting: meetingRepository, action: actionRepository, decision: decisionRepository, thread: threadRepository
         )
         return try await DashboardComposer.compose(workspaceID: workspaceID, repositories: repositories, clock: clock)
+    }
+
+    /// One `RelationshipRepositories` bundle every "everything tied to X"
+    /// caller shares — `RelationshipGraph`'s own doc comment ("The Spine",
+    /// 2026-08-22).
+    public func composeWeeklyBrief() async throws -> WeeklyBrief? {
+        guard let workspaceID = defaultPolicy?.workspaceID else { return nil }
+        let repositories = WeeklyBriefRepositories(
+            meeting: meetingRepository, action: actionRepository, decision: decisionRepository,
+            thread: threadRepository, person: personRepository)
+        return try await WeeklyBriefComposer.compose(workspaceID: workspaceID, repositories: repositories, clock: clock)
+    }
+
+    public var relationshipRepositories: RelationshipRepositories {
+        RelationshipRepositories(
+            meeting: meetingRepository, action: actionRepository, decision: decisionRepository,
+            thread: threadRepository, project: projectRepository, meetingAttendee: meetingAttendeeRepository,
+            threadParticipant: threadParticipantRepository, projectPerson: projectPersonRepository)
     }
 
     /// Builds a `CaptureEngine` wired to real capture (`AVAudioEngine`),

@@ -44,17 +44,10 @@ struct AudioTab: View {
             }
         }
         .task { await load() }
-        .fileImporter(
-            isPresented: $isShowingImportPicker, allowedContentTypes: [.mp3, .wav, .mpeg4Audio],
-            allowsMultipleSelection: false
-        ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else { return }
-                Task { await performImport(from: url) }
-            case .failure(let error):
-                importError = "\(error)"
-            }
+        .sheet(isPresented: $isShowingImportPicker) {
+            AudioDocumentPicker(
+                startingDirectory: environment.defaultImportExportDirectoryURL,
+                onPick: { url in Task { await performImport(from: url) } })
         }
         .alert(
             "Couldn't import audio",

@@ -91,6 +91,10 @@ extension AppEnvironment {
         let thread: any NSPThreadRepository
         let brainDump: any BrainDumpRepository
         let note: any NoteRepository
+        let recurrenceRule: any RecurrenceRuleRepository
+        let recurrenceException: any RecurrenceExceptionRepository
+        let threadParticipant: any ThreadParticipantRepository
+        let projectPerson: any ProjectPersonRepository
     }
 
     static func makeCoreRepositories(_ appDatabase: AppDatabase) -> CoreRepositories {
@@ -106,7 +110,11 @@ extension AppEnvironment {
             project: GRDBProjectRepository(dbWriter: dbWriter), decision: GRDBDecisionRepository(dbWriter: dbWriter),
             meetingAttendee: GRDBMeetingAttendeeRepository(dbWriter: dbWriter),
             thread: GRDBNSPThreadRepository(dbWriter: dbWriter),
-            brainDump: GRDBBrainDumpRepository(dbWriter: dbWriter), note: GRDBNoteRepository(dbWriter: dbWriter))
+            brainDump: GRDBBrainDumpRepository(dbWriter: dbWriter), note: GRDBNoteRepository(dbWriter: dbWriter),
+            recurrenceRule: GRDBRecurrenceRuleRepository(dbWriter: dbWriter),
+            recurrenceException: GRDBRecurrenceExceptionRepository(dbWriter: dbWriter),
+            threadParticipant: GRDBThreadParticipantRepository(dbWriter: dbWriter),
+            projectPerson: GRDBProjectPersonRepository(dbWriter: dbWriter))
     }
 
     static func loadAppearanceMode() -> AppearanceMode {

@@ -42,6 +42,15 @@ public struct ScheduledRecording: Sendable, Hashable, Codable, Identifiable {
     /// `OverviewTab`'s project pickers use.
     public var projectID: ProjectID?
 
+    /// Which agenda-row rail color this item displays (`Palette
+    /// .threadSlots`, indices 0...5) — chosen at creation via
+    /// `AddAgendaItemFormView`'s color picker.
+    public var colorSlot: Int
+
+    /// Set when this scheduled item is one occurrence of a recurring
+    /// series (NSP-157). `nil` for an ordinary, non-recurring item.
+    public var recurrenceRuleID: RecurrenceRuleID?
+
     public let createdAt: Date
     public var updatedAt: Date
 
@@ -57,6 +66,8 @@ public struct ScheduledRecording: Sendable, Hashable, Codable, Identifiable {
         calendarEventID: String? = nil,
         meetingID: MeetingID? = nil,
         projectID: ProjectID? = nil,
+        colorSlot: Int = 0,
+        recurrenceRuleID: RecurrenceRuleID? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -71,6 +82,8 @@ public struct ScheduledRecording: Sendable, Hashable, Codable, Identifiable {
         self.calendarEventID = calendarEventID
         self.meetingID = meetingID
         self.projectID = projectID
+        self.colorSlot = colorSlot
+        self.recurrenceRuleID = recurrenceRuleID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

@@ -52,6 +52,7 @@ struct NorthStarPhoneApp: App {
                             await Self.requestLaunchPermissionsIfNeeded(
                                 environment: newEnvironment, workspaceID: workspaceID)
                         }
+                        Task { await WeeklyBriefScheduler.schedule() }
                     }
                 } catch {
                     launchError = "\(error)"

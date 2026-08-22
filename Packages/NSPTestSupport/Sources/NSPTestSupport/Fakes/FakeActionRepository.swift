@@ -40,6 +40,10 @@ public actor FakeActionRepository: ActionRepository {
         Array(storage.values)
     }
 
+    public func fetchAll(counterpartyID: PersonID) async throws -> [Action] {
+        storage.values.filter { $0.counterpartyID == counterpartyID }
+    }
+
     public func delete(_ id: ActionID) async throws {
         storage.removeValue(forKey: id)
     }

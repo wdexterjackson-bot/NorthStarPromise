@@ -16,6 +16,11 @@ public protocol ActionRepository: Sendable {
     /// a `meeting` join) precisely so a freestanding action still surfaces
     /// here.
     func fetchAll(workspaceID: WorkspaceID) async throws -> [Action]
+    /// Every action naming this person as its counterparty — meeting-tied
+    /// or freestanding — the real, filtered query `Action.counterpartyID`'s
+    /// own doc comment promised (People recommendation, 2026-08-22): "what
+    /// do I owe this person" without scanning every action in the workspace.
+    func fetchAll(counterpartyID: PersonID) async throws -> [Action]
     func delete(_ id: ActionID) async throws
 }
 
@@ -93,6 +98,21 @@ public struct GRDBActionRepository: ActionRepository {
             let rows =
                 try ActionRow
                 .filter(Column("workspace_id") == workspaceID.rawValue.uuidString)
+                .order(Column("created_at"))
+                .fetchAll(db)
+            return try rows.map { row in
+                try row.asDomain(
+                    evidence: try EvidenceSpanPersistence.fetch(db, owner: .action(row.actionID)),
+                    auditTrail: try Self.fetchAuditTrail(actionID: row.actionID, in: db))
+            }
+        }
+    }
+
+    public func fetchAll(counterpartyID: PersonID) async throws -> [Action] {
+        try await dbWriter.read { db in
+            let rows =
+                try ActionRow
+                .filter(Column("counterparty_id") == counterpartyID.rawValue.uuidString)
                 .order(Column("created_at"))
                 .fetchAll(db)
             return try rows.map { row in

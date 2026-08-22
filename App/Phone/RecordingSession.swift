@@ -120,15 +120,22 @@ public final class RecordingSession {
         }
     }
 
-    public func start(intent: RecordingIntent = .meeting) async {
+    /// `existingMeetingID` promotes an arbitrary `.ready`-state `Meeting`
+    /// row into a real recording — not only one this same `RecordingSession`
+    /// instance drafted via `prepareDraft()` (NSP-150: "Start Recording Now"
+    /// on an agenda item created directly through `AddAgendaItemFormView`,
+    /// where no `prepareDraft()` call ever ran). Builds `meetingContainer`
+    /// on demand when it isn't already in memory, rather than requiring the
+    /// caller to have prepared one first.
+    public func start(intent: RecordingIntent = .meeting, existingMeetingID: MeetingID? = nil) async {
         // A `.draft` state can now mean either a Meeting pre-brief
         // (`prepareDraft()`) or a standalone Note (`startStandaloneNote()`)
         // — recording into an existing Note draft isn't wired yet
         // (`startStandaloneNote()`'s own doc comment), so this only
         // promotes the Meeting-draft case; a Note draft falls through and
         // no-ops rather than silently spawning an unrelated new Meeting.
-        guard state == .idle || (state == .draft && noteID == nil) else { return }
-        let draftMeetingID = state == .draft ? meetingID : nil
+        guard existingMeetingID != nil || state == .idle || (state == .draft && noteID == nil) else { return }
+        let draftMeetingID = existingMeetingID ?? (state == .draft ? meetingID : nil)
         state = .arming
 
         guard let policy = environment.defaultPolicy else {
@@ -140,10 +147,14 @@ public final class RecordingSession {
             let meeting: Meeting
             let container: MeetingContainer
             let fetchedDraft = try await Self.findDraft(draftMeetingID, in: environment.meetingRepository)
-            if let draftContainer = meetingContainer, var draftMeeting = fetchedDraft {
+            if var draftMeeting = fetchedDraft {
                 // Promote the draft in place — same meeting, same
                 // container, so pre-recording notes stay attached rather
-                // than orphaned under a discarded meetingID.
+                // than orphaned under a discarded meetingID. Reuses an
+                // already-prepared container (`prepareDraft()`'s path) or
+                // builds a fresh one for a meeting this session never
+                // drafted itself (`existingMeetingID`'s path).
+                let draftContainer = try meetingContainer ?? environment.makeMeetingContainer(meetingID: draftMeeting.meetingID)
                 draftMeeting.lifecycleState = .arming
                 try await environment.meetingRepository.update(draftMeeting, at: environment.clock.now())
                 meeting = draftMeeting

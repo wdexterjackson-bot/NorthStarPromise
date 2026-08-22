@@ -134,7 +134,9 @@ struct MeetingDetailView: View {
             case .overview:
                 OverviewTab(meeting: meeting, environment: environment)
             case .notes:
-                NotesTab(meeting: meeting, environment: environment)
+                NotesTab(
+                    meeting: meeting, environment: environment, playback: playback,
+                    compositeAudioURL: compositeAudioURL)
             case .transcript:
                 TranscriptTab(
                     meeting: meeting, environment: environment, playback: playback,

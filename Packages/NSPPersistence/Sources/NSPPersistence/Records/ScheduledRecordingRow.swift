@@ -19,6 +19,8 @@ struct ScheduledRecordingRow: Codable, FetchableRecord, PersistableRecord {
     var calendarEventID: String?
     var meetingID: String?
     var projectID: String?
+    var colorSlot: Int
+    var recurrenceRuleID: String?
     var createdAt: Date
     var updatedAt: Date
     var rowRevision: Int
@@ -35,6 +37,8 @@ struct ScheduledRecordingRow: Codable, FetchableRecord, PersistableRecord {
         case calendarEventID = "calendar_event_id"
         case meetingID = "meeting_id"
         case projectID = "project_id"
+        case colorSlot = "color_slot"
+        case recurrenceRuleID = "recurrence_rule_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case rowRevision = "row_revision"
@@ -52,6 +56,8 @@ struct ScheduledRecordingRow: Codable, FetchableRecord, PersistableRecord {
         self.calendarEventID = item.calendarEventID
         self.meetingID = item.meetingID?.rawValue.uuidString
         self.projectID = item.projectID?.rawValue.uuidString
+        self.colorSlot = item.colorSlot
+        self.recurrenceRuleID = item.recurrenceRuleID?.rawValue.uuidString
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.rowRevision = rowRevision
@@ -83,12 +89,21 @@ struct ScheduledRecordingRow: Codable, FetchableRecord, PersistableRecord {
             }
             return ProjectID(rawValue: uuid)
         }
+        let resolvedRecurrenceRuleID = try recurrenceRuleID.map { string -> RecurrenceRuleID in
+            guard let uuid = UUID(uuidString: string) else {
+                throw PersistenceError.corruptRow(
+                    table: Self.databaseTableName, column: "recurrence_rule_id", value: string)
+            }
+            return RecurrenceRuleID(rawValue: uuid)
+        }
 
         return ScheduledRecording(
             scheduledRecordingID: ScheduledRecordingID(rawValue: idUUID),
             workspaceID: WorkspaceID(rawValue: workspaceUUID),
             title: title, scheduledStart: scheduledStart, scheduledStop: scheduledStop, status: recordingStatus,
             alertStyle: recordingAlertStyle, notifyLeadTime: notifyLeadTime, calendarEventID: calendarEventID,
-            meetingID: resolvedMeetingID, projectID: resolvedProjectID, createdAt: createdAt, updatedAt: updatedAt)
+            meetingID: resolvedMeetingID, projectID: resolvedProjectID, colorSlot: colorSlot,
+            recurrenceRuleID: resolvedRecurrenceRuleID, createdAt: createdAt,
+            updatedAt: updatedAt)
     }
 }

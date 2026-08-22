@@ -13,7 +13,7 @@ import UIKit
 /// once there are more tabs than fit the bar, so there's no hand-built
 /// More screen to maintain.
 enum AppTab: CaseIterable, Hashable {
-    case dashboard, today, library, ask, actions, projects, people, threads, settings, calendar
+    case myWork, dashboard, today, library, ask, actions, projects, people, threads, settings, calendar
 
     /// Every area with its own tab-bar/area-switcher entry — everything
     /// except `.today`.
@@ -21,6 +21,7 @@ enum AppTab: CaseIterable, Hashable {
 
     var title: String {
         switch self {
+        case .myWork: return "My Work"
         case .dashboard: return "Dashboard"
         case .today: return "Today"
         case .library: return "Library"
@@ -36,6 +37,7 @@ enum AppTab: CaseIterable, Hashable {
 
     var symbolName: String {
         switch self {
+        case .myWork: return "list.bullet.clipboard"
         case .dashboard: return "square.grid.2x2.fill"
         case .today: return "sun.max"
         case .library: return "list.bullet"
@@ -113,7 +115,7 @@ struct RootView: View {
 private struct PhoneRootView: View {
     let environment: AppEnvironment
     @State private var recordingSession: RecordingSession
-    @State private var selectedTab: AppTab = .dashboard
+    @State private var selectedTab: AppTab = .myWork
     @State private var tabCustomization: TabViewCustomization
 
     private static let customizationKey = "com.dexterjackson.northstarpromise.tabCustomization"
@@ -126,6 +128,11 @@ private struct PhoneRootView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
+            Tab(AppTab.myWork.title, systemImage: AppTab.myWork.symbolName, value: AppTab.myWork) {
+                MyWorkView(environment: environment)
+            }
+            .customizationID("tab.myWork")
+
             Tab(AppTab.dashboard.title, systemImage: AppTab.dashboard.symbolName, value: AppTab.dashboard) {
                 DashboardView(environment: environment, session: recordingSession, selectTab: { selectedTab = $0 })
             }

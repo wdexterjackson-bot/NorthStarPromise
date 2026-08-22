@@ -69,3 +69,9 @@ public typealias ProjectID = TypedID<ProjectIDTag>
 
 public enum NSPThreadIDTag: Sendable {}
 public typealias NSPThreadID = TypedID<NSPThreadIDTag>
+
+public enum RecurrenceRuleIDTag: Sendable {}
+public typealias RecurrenceRuleID = TypedID<RecurrenceRuleIDTag>
+
+public enum RecurrenceExceptionIDTag: Sendable {}
+public typealias RecurrenceExceptionID = TypedID<RecurrenceExceptionIDTag>

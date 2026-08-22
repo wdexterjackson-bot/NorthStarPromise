@@ -54,6 +54,9 @@ with a "kind" column.
 | `consentRecordID` | `ConsentRecordID?` | Method + timestamp; explicitly not a legal certification |
 | `availability` | `Availability` | `.complete, .partial(missing: [SegmentRef]), .recoverable, .failed` |
 | `excludedFromMemory` | `Bool` | Keeps it in the library but out of search/retrieval/index |
+| `colorSlot` | `Int` | 0–5, chosen at creation via `AddAgendaItemFormView`'s color picker — a Thread's own color wins over this when the meeting has one (`PadAgendaRowView.railColor`) |
+| `kind` | `MeetingKind` | `.recorded, .notesOnly` — `.notesOnly` is a `.ready`-lifecycle shell with no audio expected until an import happens. A third case, `.reminder`, existed briefly and was collapsed into a plain freestanding `Action` 2026-08-22 ("The Spine" recommendation) since a reminder living as a phantom Meeting never showed up on a Person's page, in Needs You, or in any relationship query |
+| `recurrenceRuleID` | `RecurrenceRuleID?` | Set when this meeting is one occurrence (usually the series' first, promoted) of a recurring series — see **RecurrenceRule** below |
 | `createdAt` / `updatedAt` / `deletedAt` | `Date?` | `deletedAt` non-nil ⇒ soft-deleted |
 
 A meeting has no `threadID` column of its own — thread membership is many-to-many; see **Thread** below.
@@ -95,6 +98,57 @@ they're set exactly like a Meeting's are.
 | `lifecycleState` | `MeetingState` | Same reuse as `BrainDump` |
 | `policyID` / `processingMode` | | |
 | `createdAt` / `updatedAt` / `deletedAt` | | |
+
+### ScheduledRecording
+
+A pre-scheduled recording (manual or calendar-imported) with a mandatory Start/Skip local notification —
+docs/07 § 2.1. Not a `Meeting` until Start is tapped; `meetingID` is set at that point and the schedule's own
+row is kept for history (`.started`/`.completed`), not deleted.
+
+| Field | Type | Notes |
+|---|---|---|
+| `scheduledRecordingID` | `ScheduledRecordingID` | |
+| `workspaceID` | `WorkspaceID` | |
+| `title` / `scheduledStart` / `scheduledStop` | `String` / `Date` / `Date` | Display/scheduling metadata only — never timeline math |
+| `status` | `ScheduledRecordingStatus` | `.pending, .notified, .started, .missed, .completed, .skipped, .cancelled` |
+| `alertStyle` | `ScheduledRecordingAlertStyle` | `.sound, .vibrateOnly, .silent` |
+| `notifyLeadTime` | `TimeInterval` | Seconds before `scheduledStart` the reminder fires; `0` = at start time |
+| `calendarEventID` | `String?` | Set only when created via calendar import |
+| `meetingID` | `MeetingID?` | Set once Start promotes this into a real `Meeting` |
+| `projectID` | `ProjectID?` | Applied to the resulting `Meeting` at promotion |
+| `colorSlot` | `Int` | Same 0–5 rail-color slot `Meeting.colorSlot` uses |
+| `recurrenceRuleID` | `RecurrenceRuleID?` | Set when this item is one occurrence of a recurring series |
+| `createdAt` / `updatedAt` | | |
+
+### RecurrenceRule / RecurrenceException
+
+Added 2026-08-22 for Outlook-parity recurring events on `Meeting`/`ScheduledRecording` (docs/09, NSP-157–160).
+The standard rule-plus-exceptions model every real calendar app uses — future occurrences are never
+materialized as real rows; a pure, `Clock`-free `RecurrenceExpander.occurrences(of:seriesStart:in:calendar:)`
+expands a rule into concrete dates within a bounded display window only. A `Meeting`/`ScheduledRecording` only
+becomes real the moment an occurrence is actually started, exactly like a non-recurring item.
+
+```swift
+enum RecurrenceFrequency: Sendable, Hashable, Codable {
+    case daily(interval: Int, everyWeekday: Bool = false)
+    case weekly(interval: Int, days: Set<Weekday>)
+    case monthly(interval: Int, pattern: MonthlyPattern)   // .dayOfMonth(N) or .relativeWeekday(ordinal, weekday)
+    case yearly(month: Int, pattern: MonthlyPattern)
+}
+enum RecurrenceEnd: Sendable, Hashable, Codable {
+    case never
+    case afterOccurrences(Int)
+    case onDate(Date)
+}
+```
+
+| Field | RecurrenceRule | RecurrenceException |
+|---|---|---|
+| ID | `recurrenceRuleID` | `recurrenceExceptionID` |
+| Links to | `workspaceID` | `recurrenceRuleID` (cascade delete) |
+| Pattern | `frequency: RecurrenceFrequency`, `end: RecurrenceEnd` | `originalOccurrenceDate: Date` — the virtual occurrence this exception replaces |
+| Kind | — | `.modified` (paired with an `overrideMeetingID`/`overrideScheduledRecordingID`) or `.cancelled` (just excludes the date) |
+| Scope edit semantics | "This occurrence" writes an exception; "This and following" truncates this rule's `end` (does **not** auto-create a continuation rule — a disclosed v1 simplification); "All occurrences" edits the rule/master row directly | — |
 
 ### Segment / TranscriptTurn / NoteBlock / TimelineEvent — polymorphic ownership
 
@@ -204,6 +258,11 @@ single `threadID` column on `Meeting`. Independent of `Project` membership; a me
 neither. `Action`/`Decision` can each carry their own `threadID` too, independent of whichever thread(s) their
 meeting belongs to (see below) — a freestanding action with no meeting at all can still thread.
 
+A Thread also tracks **people** directly, independent of meeting attendance — the `thread_participant` join
+table (`ThreadID`↔`PersonID`, added 2026-08-22, People plan phase 2), set via `ThreadDetailView`'s "Edit
+People." `Project` has the identical `project_person` join for the same reason. Both are read through
+`RelationshipGraph` (docs/04) rather than a bespoke per-screen query.
+
 ### Insight (summaries and generated content)
 
 | Field | Type | Notes |
@@ -251,7 +310,10 @@ evidence is shown as such; it never silently disappears.
 
 ### Supporting entities
 
-`Person` (name, aliases, voice enrollment ref, contact link, workspace scope) · `Workspace` ·
+`Person` (name, aliases, voice enrollment ref, contact link, workspace scope, plus two 2026-08-22 additions:
+`tags: [String]` — freeform relationship labels ("Direct report", "Board", "Vendor"), deliberately not an enum
+since an executive's roster doesn't fit one fixed taxonomy, and `notes: String?` — freeform context the user
+writes directly, never AI-generated) · `Workspace` ·
 `Policy` (retention, processing scope, announcement requirement, domain/location rules) ·
 `ConsentRecord` (method, timestamp, participants acknowledged) ·
 `AuditEvent` (actor, action, object, payload hash, result, timestamp) ·

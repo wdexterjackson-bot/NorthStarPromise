@@ -162,4 +162,32 @@ struct DashboardComposerThreadsTests {
         let freestandingItem = try #require(model.needsYou.items.first { $0.actionID == freestandingAction.actionID })
         #expect(freestandingItem.provenance == "")
     }
+
+    @Test func test_compose_signals_flagsAThreadQuietFor14PlusDaysButNotARecentOne() async throws {
+        let appDatabase = try AppDatabase.makeInMemory()
+        let fixture = try await Self.makeFixture(appDatabase)
+        let threadRepository = GRDBNSPThreadRepository(dbWriter: appDatabase.dbWriter)
+        let now = Date()
+
+        let quietThread = NSPThread(
+            threadID: NSPThreadID(rawValue: UUID()), workspaceID: fixture.workspaceID, title: "Vendor contract",
+            lastTouchedAt: now.addingTimeInterval(-20 * 86400), createdAt: now, updatedAt: now)
+        let activeThread = NSPThread(
+            threadID: NSPThreadID(rawValue: UUID()), workspaceID: fixture.workspaceID, title: "Q3 roadmap",
+            lastTouchedAt: now, createdAt: now, updatedAt: now)
+        try await threadRepository.insert(quietThread, at: now)
+        try await threadRepository.insert(activeThread, at: now)
+
+        let repositories = DashboardRepositories(
+            meeting: GRDBMeetingRepository(dbWriter: appDatabase.dbWriter),
+            action: GRDBActionRepository(dbWriter: appDatabase.dbWriter),
+            decision: GRDBDecisionRepository(dbWriter: appDatabase.dbWriter), thread: threadRepository)
+        let model = try await DashboardComposer.compose(
+            workspaceID: fixture.workspaceID, repositories: repositories, clock: SystemClock())
+
+        #expect(model.signals.count == 1)
+        let signal = try #require(model.signals.first)
+        #expect(signal.kind == .dormantThread)
+        #expect(signal.leadClause.contains("Vendor contract"))
+    }
 }

@@ -87,10 +87,20 @@ public struct AgendaItem: Identifiable, Equatable, Sendable {
     /// one is a bug, not a style choice.
     public let continuityFact: String
     public let joinURL: URL?
+    /// The meeting's own rail color (`Palette.threadSlots`, indices 0...5)
+    /// — the View layer prefers `thread`'s color when a thread is present,
+    /// falling back to this for threadless meetings.
+    public let colorSlot: Int
+    public let kind: MeetingKind
+    /// Set when this meeting is one occurrence of a recurring series
+    /// (NSP-157/160) — drives the agenda row's ⟳ badge and the "…" menu's
+    /// scope prompt.
+    public let recurrenceRuleID: RecurrenceRuleID?
 
     public init(
         meetingID: MeetingID, start: Date, end: Date, title: String, thread: ThreadRef?, state: AgendaRowState,
-        recapReady: Bool, continuityFact: String, joinURL: URL? = nil
+        recapReady: Bool, continuityFact: String, joinURL: URL? = nil, colorSlot: Int, kind: MeetingKind,
+        recurrenceRuleID: RecurrenceRuleID? = nil
     ) {
         self.meetingID = meetingID
         self.start = start
@@ -101,6 +111,9 @@ public struct AgendaItem: Identifiable, Equatable, Sendable {
         self.recapReady = recapReady
         self.continuityFact = continuityFact
         self.joinURL = joinURL
+        self.colorSlot = colorSlot
+        self.kind = kind
+        self.recurrenceRuleID = recurrenceRuleID
     }
 }
 

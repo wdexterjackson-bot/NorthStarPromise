@@ -60,6 +60,11 @@ public final class ScheduledRecordingCoordinator {
     /// apart.
     public func create(_ item: ScheduledRecording) async throws {
         try await repository.insert(item, at: item.createdAt)
+        // Idempotent: a no-op re-prompt once the user has already answered,
+        // so this is safe to call on every create rather than only relying
+        // on the launch-time check (`requestLaunchPermissionsIfNeeded`),
+        // which misses a schedule's first-ever creation within a session.
+        _ = await notificationScheduler.requestAuthorization()
         await notificationScheduler.schedule(item)
     }
 

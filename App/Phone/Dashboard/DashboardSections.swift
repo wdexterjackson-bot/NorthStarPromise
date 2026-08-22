@@ -51,7 +51,7 @@ struct DashboardRecallField: View {
             HStack(spacing: 10) {
                 Image(systemName: "magnifyingglass").font(.system(size: 17)).foregroundStyle(Palette.textQuaternary)
                 Text("Ask across \(corpusCount) meetings…")
-                    .font(Typo.ui(13.5, .medium))
+                    .font(Typo.ui(15.5, .medium))
                     .foregroundStyle(Palette.textTertiary)
                     .lineLimit(1)
                 Spacer(minLength: 0)

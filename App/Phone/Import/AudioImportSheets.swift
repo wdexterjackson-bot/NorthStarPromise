@@ -24,17 +24,10 @@ struct AudioImportSheets: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .fileImporter(
-                isPresented: $isShowingPicker, allowedContentTypes: [.mp3, .wav, .mpeg4Audio],
-                allowsMultipleSelection: false
-            ) { result in
-                switch result {
-                case .success(let urls):
-                    guard let url = urls.first else { return }
-                    Task { await performImport(from: url) }
-                case .failure(let error):
-                    importError = "\(error)"
-                }
+            .sheet(isPresented: $isShowingPicker) {
+                AudioDocumentPicker(
+                    startingDirectory: environment.defaultImportExportDirectoryURL,
+                    onPick: { url in Task { await performImport(from: url) } })
             }
             .overlay { if isImporting { ImportProgressOverlay() } }
             .alert(

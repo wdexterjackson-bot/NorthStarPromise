@@ -12,32 +12,44 @@ by ID (`I1`–`I7`) from `CLAUDE.md` § 2.
 
 ## 1. Information architecture
 
-Six areas. Nothing else is a top-level destination. **Dashboard** replaced **Today** as the first, default
-area — Dashboard is the management hub (every meeting, every open action, across all time); Today narrowed to
-"what do I need to do today" and is reached *from* Dashboard's own Today card, not as a peer top-level area
-(Watch is unaffected — it never had a Today/Dashboard distinction; its root stays the Ready screen).
+**Updated 2026-08-22** — this section drifted well behind the real `AppTab` case set as Projects, People,
+Threads, Calendar, and now My Work shipped; rewritten against current code rather than left stale. Eleven
+areas today (`AppTab`): My Work, Dashboard, Today, Library, Ask, Actions, Projects, People, Threads, Settings,
+Calendar. **My Work** replaced **Dashboard** as the first, default area 2026-08-22 ("The Spine" recommendation)
+— Dashboard is unchanged and fully reachable, still hosting the capture controls and Today's Agenda sidebar on
+iPad; My Work is the new "what am I actually managing" lens, organized by active Thread rather than by date.
+Today narrowed to "what do I need to do today" and is reached *from* Dashboard's own Today card, not as a peer
+top-level area (Watch is unaffected — it never had a Today/Dashboard distinction; its root stays the Ready
+screen).
 
 | Area | Contains | Not allowed here |
 |---|---|---|
-| **Dashboard** | Start capture, cross-meeting "needs attention," a Library preview, every open action regardless of due date, an explicit Today card, an explicit Ask entry point, an explicit "Projects" placeholder (no project/tag data model exists yet — never a fabricated grouping) | Content scoped to only today (that's Today) |
+| **My Work** | One card per open Thread — next meeting, open action count, people count, a "gone quiet" badge past 14 days — sourced through `RelationshipGraph`, not a bespoke query. A toolbar link to the Weekly Brief | Calendar/date-scoped views (that's Today's Agenda / Calendar) |
+| **Dashboard** | Start capture, cross-meeting "needs attention," a Library preview, every open action regardless of due date, an explicit Today card, an explicit Ask entry point, Today's Agenda (iPad sidebar) | Content scoped to only today (that's Today) |
 | **Today** *(reached from Dashboard, not a top-level area)* | The active/next recording, calendar-linked events happening today, Scheduled Recording's "Upcoming" list, meetings needing review, actions due specifically today | Historical browse, every-open-action-ever (those live in Dashboard) |
-| **Library** | Every artifact the app holds — Meetings, Brain Dumps, and Notes, day-grouped with lifecycle-state filters (a Brain Dump/Note reuses `MeetingState`, so one filter set already covers all three), plus Projects reachable as their own grouping. Not meeting-only: docs/02 § 2's "the Library contains all containers of artifacts," not an implied single kind | Live capture controls |
+| **Library** | Every artifact the app holds — Meetings, Brain Dumps, and Notes, day-grouped with lifecycle-state filters (a Brain Dump/Note reuses `MeetingState`, so one filter set already covers all three) | Live capture controls |
 | **Meeting** | One meeting's tabs: Overview, Notes, Transcript, Audio, Actions, Insights, Attachments, Sharing, Processing log. Insights merges `Insight` and `Decision` into one chronological list — "things learned or decided" is one category, not two sections | Cross-meeting search |
 | **Ask** | Cross-meeting question answering with a **mandatory** scope selector and citations | Ungrounded answers (I4) |
-| **Actions** | Action + decision ledgers across meetings, owner/date review, export queue, unanswered questions | Silent sends (I6) |
+| **Actions** | Action + decision ledgers across meetings, owner/date review, export queue, unanswered questions. Freestanding, due-dated "Action Reminder" items (no `Meeting` — collapsed from a phantom-Meeting design 2026-08-22) render here and on the agenda by date | Silent sends (I6) |
+| **Projects** | Real entity, not a placeholder — meetings, notes, open actions, and (2026-08-22) people grouped by project, independent of Thread membership | — |
+| **People** | Every tracked `Person` — relationship tags, notes, what's owed each way, meetings/threads/projects they're linked to, "Add to Thread"/"Add to Project" | — |
+| **Threads** | Storylines spanning meetings — open/closed status, linked people (2026-08-22), open actions/decisions | — |
+| **Calendar** | Month grid over this workspace's meetings/scheduled recordings, including recurring-series virtual occurrences (2026-08-22) — iPad only, no EventKit integration | — |
 | **Settings** | Capture defaults, processing mode default, consent + policy, storage, sync/iCloud, integrations, accessibility, diagnostics | Per-meeting overrides (those live in Meeting → Sharing / Overview) |
 
 ### 1.1 Platform mapping
 
 | Area | Watch | iPhone | iPad |
 |---|---|---|---|
-| Dashboard | Not present — Watch root stays the Ready screen | Tab 1 (default) | Segment 1 (default) |
-| Today | Not present | Pushed from Dashboard's Today card | Set via Dashboard's Today card (not a segment) |
-| Library | Compressed to **History** (recent 20, local-first) | Tab 2 | Segment, list column |
+| My Work | Not present | Tab 1 (default) | Header area 1 (default) |
+| Dashboard | Not present — Watch root stays the Ready screen | Tab | Header area, hosts Today's Agenda sidebar |
+| Today | Not present | Pushed from Dashboard's Today card | Set via Dashboard's Today card (not its own header area) |
+| Library | Compressed to **History** (recent 20, local-first) | Tab | Header area, list column |
 | Meeting | Read-only glance: state, duration, transfer state | Tab-bar detail with 9 tabs | Split canvas + transcript workspace |
-| Ask | Not present | Tab 3 | Segment, opens in its own column or window |
-| Actions | Not present (v1) | Tab 4 | Segment |
-| Settings | Minimal: haptics, mic check, storage, reclaim | Tab 5 | Segment |
+| Ask | Not present | Tab | Header area |
+| Actions, Projects, People, Threads | Not present | Tabs | Reachable from `PadDashboardSidebar`'s restricted nav list, not the top header |
+| Calendar | Not present | Not present (v1, iPad only) | Reachable from `PadDashboardSidebar`'s restricted nav list |
+| Settings | Minimal: haptics, mic check, storage, reclaim | Tab | Header area |
 
 **Compression rule (Watch):** the Watch shows only what a wrist glance must answer (§ 3.1). It never shows
 transcript text, summaries, attendee lists, or calendar titles marked `isTitleSensitive`.
@@ -106,6 +118,25 @@ calendar event they pick from a list, so they don't have to remember to start it
   device's own Settings/Focus state, not a per-request flag. True alarm-class behavior (rings through the mute
   switch) exists via AlarmKit on iOS/watchOS 26+, which this app's 18.0/11.0 floor doesn't reach yet — a
   deliberate, scoped fast-follow, not a silent gap.
+
+### 2.2 Recurring events (added 2026-08-22)
+
+`AddAgendaItemFormView` (the "+" flow on Today's Agenda and Calendar) gains a **"Make Event Recurring"**
+button under "When," hidden for the Action Reminder Meeting Type (a plain `Action` has no recurrence field).
+Tapping it opens `RecurrenceConfigurationView`, an Outlook-style secondary sheet: Daily/Weekly/Monthly/Yearly
+segmented control, pattern-specific controls (interval stepper, weekday multi-select, day-of-month vs.
+Nth-weekday), and a Range-of-recurrence section (Never / After N occurrences / On date). "Done" hands an
+in-memory rule back to the parent form, not persisted until the whole event saves — same deferred-commit
+pattern the color and Meeting Type pickers already use there. Once configured, the button's label becomes a
+human-readable summary ("Weekly on Mon, Wed, Fri").
+
+A recurring row shows a small ⟳ badge next to its title on both Today's Agenda and Calendar. Its "…" menu's
+Modify/Cancel actions gain a three-way scope prompt — Outlook's "This event is part of a series" dialog:
+**This occurrence**, **This and following occurrences**, **All occurrences**. Future occurrences with no real
+row yet render as a distinct, badge-marked row with only Start/Skip in its menu (no Modify — starting it is how
+you get something to modify). See `docs/02-DATA-MODEL.md`'s RecurrenceRule/RecurrenceException section for the
+two disclosed v1 simplifications ("this and following" doesn't spin up a continuation series; "all occurrences"
+cancel doesn't cascade-delete other already-promoted rows in the series).
 
 ---
 

@@ -16,10 +16,14 @@ struct ProjectDetailView: View {
     @State private var project: Project?
     @State private var meetings: [Meeting] = []
     @State private var actions: [Action] = []
+    /// People tracked against this project (People plan phase 2,
+    /// 2026-08-22) — independent of meeting attendance.
+    @State private var people: [Person] = []
     @State private var loadError: String?
     @State private var isRenaming = false
     @State private var renamedTitle = ""
     @State private var isConfirmingDelete = false
+    @State private var isEditingPeople = false
 
     private var openActions: [Action] {
         actions.filter { ProjectOpenStatuses.set.contains($0.status) }
@@ -41,6 +45,7 @@ struct ProjectDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: NSPSpacing.extraLarge) {
                         header(for: project)
+                        peopleSection
                         meetingsSection
                         actionsSection
                     }
@@ -56,6 +61,7 @@ struct ProjectDetailView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    Button("Edit People", systemImage: "person.2") { isEditingPeople = true }
                     Button("Rename") {
                         renamedTitle = project?.name ?? ""
                         isRenaming = true
@@ -79,7 +85,20 @@ struct ProjectDetailView: View {
         } message: {
             Text("Meetings stay untouched — only the project grouping is removed. Can't be undone.")
         }
+        .sheet(isPresented: $isEditingPeople) {
+            ProjectPeopleEditSheet(projectID: projectID, environment: environment, onDone: { Task { await load() } })
+        }
         .task { await load() }
+    }
+
+    @ViewBuilder
+    private var peopleSection: some View {
+        if !people.isEmpty {
+            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                Text("People").font(Typo.ui(17, .extrabold))
+                FlowPeopleRow(people: people)
+            }
+        }
     }
 
     @ViewBuilder
@@ -159,6 +178,13 @@ struct ProjectDetailView: View {
             }
             meetings = loadedMeetings
             actions = loadedActions
+
+            let personIDs = try await environment.projectPersonRepository.fetchPersonIDs(for: projectID)
+            var loadedPeople: [Person] = []
+            for personID in personIDs {
+                if let person = try await environment.personRepository.find(personID) { loadedPeople.append(person) }
+            }
+            people = loadedPeople.sorted { $0.name < $1.name }
         } catch {
             loadError = "\(error)"
         }
@@ -192,6 +218,77 @@ struct ProjectDetailView: View {
             await load()
         } catch {
             loadError = "\(error)"
+        }
+    }
+}
+
+/// Mirrors `ThreadDetailView`'s `ThreadPeopleEditSheet` — swap `NSPThreadID`/
+/// `threadParticipantRepository` for `ProjectID`/`projectPersonRepository`
+/// (People plan phase 2, 2026-08-22).
+private struct ProjectPeopleEditSheet: View {
+    let projectID: ProjectID
+    let environment: AppEnvironment
+    let onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var allPeople: [Person] = []
+    @State private var selectedPersonIDs: Set<PersonID> = []
+    @State private var isSaving = false
+    @State private var saveError: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("People") {
+                    if allPeople.isEmpty {
+                        Text("No people yet.").font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.textTertiary)
+                    } else {
+                        ForEach(allPeople.sorted(by: { $0.name < $1.name })) { person in
+                            Toggle(person.name, isOn: personBinding(person.personID))
+                        }
+                    }
+                }
+                if let saveError {
+                    Text(saveError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
+                }
+            }
+            .navigationTitle("Edit People")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { await save() } }.disabled(isSaving)
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func personBinding(_ personID: PersonID) -> Binding<Bool> {
+        Binding(
+            get: { selectedPersonIDs.contains(personID) },
+            set: { isOn in
+                if isOn { selectedPersonIDs.insert(personID) } else { selectedPersonIDs.remove(personID) }
+            })
+    }
+
+    private func load() async {
+        guard let workspaceID = environment.defaultPolicy?.workspaceID else { return }
+        allPeople = (try? await environment.personRepository.fetchAll(workspaceID: workspaceID)) ?? []
+        selectedPersonIDs = (try? await environment.projectPersonRepository.fetchPersonIDs(for: projectID)) ?? []
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await environment.projectPersonRepository.setPeople(for: projectID, personIDs: selectedPersonIDs)
+            onDone()
+            dismiss()
+        } catch {
+            saveError = "\(error)"
         }
     }
 }

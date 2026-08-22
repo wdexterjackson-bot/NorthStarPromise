@@ -30,6 +30,9 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
     var consentRecordID: String?
     var availability: String
     var excludedFromMemory: Bool
+    var colorSlot: Int
+    var kind: String
+    var recurrenceRuleID: String?
     var createdAt: Date
     var updatedAt: Date
     var deletedAt: Date?
@@ -57,6 +60,9 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         case consentRecordID = "consent_record_id"
         case availability
         case excludedFromMemory = "excluded_from_memory"
+        case colorSlot = "color_slot"
+        case kind
+        case recurrenceRuleID = "recurrence_rule_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case deletedAt = "deleted_at"
@@ -97,6 +103,9 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
         case .failed: self.availability = "failed"
         }
         self.excludedFromMemory = meeting.excludedFromMemory
+        self.colorSlot = meeting.colorSlot
+        self.kind = meeting.kind.rawValue
+        self.recurrenceRuleID = meeting.recurrenceRuleID?.rawValue.uuidString
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = meeting.deletedAt
@@ -161,6 +170,9 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
             throw PersistenceError.corruptRow(
                 table: Self.databaseTableName, column: "processing_mode", value: processingMode)
         }
+        guard let kindValue = MeetingKind(rawValue: kind) else {
+            throw PersistenceError.corruptRow(table: Self.databaseTableName, column: "kind", value: kind)
+        }
 
         let resolvedLifecycleState: MeetingState
         switch lifecycleState {
@@ -207,6 +219,14 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
                 }
                 return ConsentRecordID(rawValue: uuid)
             }
+        let resolvedRecurrenceRuleID: RecurrenceRuleID? =
+            try recurrenceRuleID.map {
+                guard let uuid = UUID(uuidString: $0) else {
+                    throw PersistenceError.corruptRow(
+                        table: Self.databaseTableName, column: "recurrence_rule_id", value: $0)
+                }
+                return RecurrenceRuleID(rawValue: uuid)
+            }
         return Meeting(
             meetingID: MeetingID(rawValue: meetingUUID),
             workspaceID: WorkspaceID(rawValue: workspaceUUID),
@@ -227,6 +247,9 @@ struct MeetingRow: Codable, FetchableRecord, PersistableRecord {
             consentRecordID: resolvedConsentRecordID,
             availability: resolvedAvailability,
             excludedFromMemory: excludedFromMemory,
+            colorSlot: colorSlot,
+            kind: kindValue,
+            recurrenceRuleID: resolvedRecurrenceRuleID,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt

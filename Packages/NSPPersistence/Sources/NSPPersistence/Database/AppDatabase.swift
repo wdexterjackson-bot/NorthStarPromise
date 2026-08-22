@@ -44,6 +44,12 @@ public struct AppDatabase: Sendable {
         Migration014ConvertMentalNoteMeetings.self,
         Migration015AddMeetingThreadBridge.self,
         Migration016AddFreestandingActions.self,
+        Migration017AddMeetingColorAndKind.self,
+        Migration018AddPersonTags.self,
+        Migration019AddRecurrence.self,
+        Migration020AddPersonNotes.self,
+        Migration021AddThreadAndProjectPersonJoins.self,
+        Migration022CollapseActionReminders.self,
     ]
 
     public static var migrator: DatabaseMigrator {

@@ -40,6 +40,24 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
     public var availability: Availability
     public var excludedFromMemory: Bool
 
+    /// Which agenda-row rail color this meeting displays (`Palette
+    /// .threadSlots`, indices 0...5) — chosen at creation via
+    /// `AddAgendaItemFormView`'s color picker, independent of any Thread
+    /// membership. A meeting with a Thread still shows that Thread's color
+    /// instead (`PadAgendaRow.railColor`); this only matters for meetings
+    /// with no Thread.
+    public var colorSlot: Int
+    /// `.recorded` for every ordinarily-captured meeting; `.notesOnly`/
+    /// `.reminder` for the two no-audio-expected shells the "Add to Today's
+    /// Agenda" flow can create directly instead of a `ScheduledRecording`.
+    public var kind: MeetingKind
+
+    /// Set when this meeting is one occurrence of a recurring series
+    /// (NSP-157) — either the still-virtual series' first real promotion,
+    /// or a `RecurrenceException.modified` override for one later date.
+    /// `nil` for an ordinary, non-recurring meeting.
+    public var recurrenceRuleID: RecurrenceRuleID?
+
     public var createdAt: Date
     public var updatedAt: Date
     public var deletedAt: Date?
@@ -63,6 +81,9 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         consentRecordID: ConsentRecordID? = nil,
         availability: Availability,
         excludedFromMemory: Bool = false,
+        colorSlot: Int = 0,
+        kind: MeetingKind = .recorded,
+        recurrenceRuleID: RecurrenceRuleID? = nil,
         createdAt: Date,
         updatedAt: Date,
         deletedAt: Date? = nil
@@ -85,6 +106,9 @@ public struct Meeting: Sendable, Hashable, Codable, Identifiable {
         self.consentRecordID = consentRecordID
         self.availability = availability
         self.excludedFromMemory = excludedFromMemory
+        self.colorSlot = colorSlot
+        self.kind = kind
+        self.recurrenceRuleID = recurrenceRuleID
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.deletedAt = deletedAt

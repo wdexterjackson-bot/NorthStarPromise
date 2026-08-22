@@ -22,8 +22,12 @@ struct ThreadDetailView: View {
     @State private var actions: [Action] = []
     @State private var decisions: [Decision] = []
     @State private var insights: [Insight] = []
+    /// People tracked against this thread (People plan phase 2, 2026-08-22)
+    /// — independent of meeting attendance, set explicitly via "Edit People".
+    @State private var people: [Person] = []
     @State private var loadError: String?
     @State private var isEditingMeetings = false
+    @State private var isEditingPeople = false
     @State private var isRenaming = false
     @State private var renamedTitle = ""
     @State private var isConfirmingDelete = false
@@ -46,6 +50,7 @@ struct ThreadDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: NSPSpacing.extraLarge) {
                         header(for: thread)
+                        peopleSection
                         meetingsSection
                         actionsSection
                         decisionsSection
@@ -64,6 +69,7 @@ struct ThreadDetailView: View {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("Edit Meetings", systemImage: "link") { isEditingMeetings = true }
+                    Button("Edit People", systemImage: "person.2") { isEditingPeople = true }
                     Button("Rename") {
                         renamedTitle = thread?.title ?? ""
                         isRenaming = true
@@ -90,7 +96,20 @@ struct ThreadDetailView: View {
         .sheet(isPresented: $isEditingMeetings) {
             ThreadMeetingsEditSheet(threadID: threadID, environment: environment, onDone: { Task { await load() } })
         }
+        .sheet(isPresented: $isEditingPeople) {
+            ThreadPeopleEditSheet(threadID: threadID, environment: environment, onDone: { Task { await load() } })
+        }
         .task { await load() }
+    }
+
+    @ViewBuilder
+    private var peopleSection: some View {
+        if !people.isEmpty {
+            VStack(alignment: .leading, spacing: NSPSpacing.medium) {
+                Text("People").font(Typo.ui(17, .extrabold))
+                FlowPeopleRow(people: people)
+            }
+        }
     }
 
     @ViewBuilder
@@ -223,6 +242,13 @@ struct ThreadDetailView: View {
             actions = loadedActions
             decisions = loadedDecisions
             insights = loadedInsights
+
+            let personIDs = try await environment.threadParticipantRepository.fetchParticipantIDs(for: threadID)
+            var loadedPeople: [Person] = []
+            for personID in personIDs {
+                if let person = try await environment.personRepository.find(personID) { loadedPeople.append(person) }
+            }
+            people = loadedPeople.sorted { $0.name < $1.name }
         } catch {
             loadError = "\(error)"
         }
@@ -344,6 +370,102 @@ private struct ThreadMeetingsEditSheet: View {
             dismiss()
         } catch {
             saveError = "\(error)"
+        }
+    }
+}
+
+/// Mirrors `ThreadMeetingsEditSheet` almost line-for-line — swap `Meeting`/
+/// `meetingRepository`/`setMeetings` for `Person`/`personRepository`/
+/// `setParticipants` (People plan phase 2, 2026-08-22).
+private struct ThreadPeopleEditSheet: View {
+    let threadID: NSPThreadID
+    let environment: AppEnvironment
+    let onDone: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var allPeople: [Person] = []
+    @State private var selectedPersonIDs: Set<PersonID> = []
+    @State private var isSaving = false
+    @State private var saveError: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("People") {
+                    if allPeople.isEmpty {
+                        Text("No people yet.").font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.textTertiary)
+                    } else {
+                        ForEach(allPeople.sorted(by: { $0.name < $1.name })) { person in
+                            Toggle(person.name, isOn: personBinding(person.personID))
+                        }
+                    }
+                }
+                if let saveError {
+                    Text(saveError).font(Typo.ui(11.5, .medium)).foregroundStyle(Palette.danger.foreground)
+                }
+            }
+            .navigationTitle("Edit People")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { Task { await save() } }.disabled(isSaving)
+                }
+            }
+            .task { await load() }
+        }
+    }
+
+    private func personBinding(_ personID: PersonID) -> Binding<Bool> {
+        Binding(
+            get: { selectedPersonIDs.contains(personID) },
+            set: { isOn in
+                if isOn { selectedPersonIDs.insert(personID) } else { selectedPersonIDs.remove(personID) }
+            })
+    }
+
+    private func load() async {
+        guard let workspaceID = environment.defaultPolicy?.workspaceID else { return }
+        allPeople = (try? await environment.personRepository.fetchAll(workspaceID: workspaceID)) ?? []
+        selectedPersonIDs =
+            (try? await environment.threadParticipantRepository.fetchParticipantIDs(for: threadID)) ?? []
+    }
+
+    private func save() async {
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            try await environment.threadParticipantRepository.setParticipants(
+                for: threadID, personIDs: selectedPersonIDs)
+            onDone()
+            dismiss()
+        } catch {
+            saveError = "\(error)"
+        }
+    }
+}
+
+/// Read-only person chips — horizontally scrolling, same reasoning
+/// `PersonDetailView.FlowTagRow` gives for not building a true wrap layout
+/// (a thread's/project's people count is always small). Not `private` —
+/// `ProjectDetailView.swift` (a separate file, same target) reuses this too.
+struct FlowPeopleRow: View {
+    let people: [Person]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(people) { person in
+                    Text(person.name)
+                        .font(Typo.ui(11.5, .semibold))
+                        .foregroundStyle(Palette.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Palette.fill, in: .capsule)
+                }
+            }
         }
     }
 }

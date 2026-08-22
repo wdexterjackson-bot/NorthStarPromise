@@ -27,6 +27,7 @@ public struct GRDBPersonRepository: PersonRepository {
         try await dbWriter.write { db in
             try row.insert(db)
             try Self.replaceAliases(person.aliases, personID: row.personID, in: db)
+            try Self.replaceTags(person.tags, personID: row.personID, in: db)
         }
     }
 
@@ -40,13 +41,16 @@ public struct GRDBPersonRepository: PersonRepository {
                 person: person, createdAt: existing.createdAt, updatedAt: date, rowRevision: existing.rowRevision + 1)
             try updated.update(db)
             try Self.replaceAliases(person.aliases, personID: id, in: db)
+            try Self.replaceTags(person.tags, personID: id, in: db)
         }
     }
 
     public func find(_ id: PersonID) async throws -> Person? {
         try await dbWriter.read { db in
             guard let row = try PersonRow.fetchOne(db, key: id.rawValue.uuidString) else { return nil }
-            return try row.asDomain(aliases: try Self.fetchAliases(personID: row.personID, in: db))
+            return try row.asDomain(
+                aliases: try Self.fetchAliases(personID: row.personID, in: db),
+                tags: try Self.fetchTags(personID: row.personID, in: db))
         }
     }
 
@@ -56,7 +60,11 @@ public struct GRDBPersonRepository: PersonRepository {
                 .filter(Column("workspace_id") == workspaceID.rawValue.uuidString)
                 .order(Column("name"))
                 .fetchAll(db)
-                .map { row in try row.asDomain(aliases: try Self.fetchAliases(personID: row.personID, in: db)) }
+                .map { row in
+                    try row.asDomain(
+                        aliases: try Self.fetchAliases(personID: row.personID, in: db),
+                        tags: try Self.fetchTags(personID: row.personID, in: db))
+                }
         }
     }
 
@@ -80,6 +88,21 @@ public struct GRDBPersonRepository: PersonRepository {
         try PersonAliasRow.filter(Column("person_id") == personID).deleteAll(db)
         for (index, alias) in aliases.enumerated() {
             try PersonAliasRow(personID: personID, position: index, alias: alias).insert(db)
+        }
+    }
+
+    private static func fetchTags(personID: String, in db: Database) throws -> [String] {
+        try PersonTagRow
+            .filter(Column("person_id") == personID)
+            .order(Column("position"))
+            .fetchAll(db)
+            .map(\.tag)
+    }
+
+    private static func replaceTags(_ tags: [String], personID: String, in db: Database) throws {
+        try PersonTagRow.filter(Column("person_id") == personID).deleteAll(db)
+        for (index, tag) in tags.enumerated() {
+            try PersonTagRow(personID: personID, position: index, tag: tag).insert(db)
         }
     }
 }
