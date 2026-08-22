@@ -206,6 +206,7 @@ public final class RecordingSession {
             meetingID = meeting.meetingID
             state = .recording
             startElapsedTimer(from: Date())
+            CaptureActivityController.shared.start(mode: .meeting)
         } catch {
             state = .failed(Self.describeFailure(error))
         }
@@ -218,6 +219,7 @@ public final class RecordingSession {
             state = .paused
             stopElapsedTimer()
             inputLevel = 0
+            CaptureActivityController.shared.setPaused(true)
         } catch {
             state = .failed(Self.describeFailure(error))
         }
@@ -228,7 +230,9 @@ public final class RecordingSession {
         do {
             try await captureEngine.resume()
             state = .recording
-            startElapsedTimer(from: Date())
+            let resumedAt = Date()
+            startElapsedTimer(from: resumedAt)
+            CaptureActivityController.shared.setPaused(false, resumedAt: resumedAt)
         } catch {
             state = .failed(Self.describeFailure(error))
         }
@@ -273,6 +277,7 @@ public final class RecordingSession {
             }
             reset()
         } catch {
+            CaptureActivityController.shared.end()
             state = .failed(Self.describeFailure(error))
         }
     }
@@ -382,6 +387,7 @@ public final class RecordingSession {
     }
 
     private func reset() {
+        CaptureActivityController.shared.end()
         state = .idle
         elapsedSeconds = 0
         markers = []

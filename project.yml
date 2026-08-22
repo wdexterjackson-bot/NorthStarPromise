@@ -48,10 +48,15 @@ targets:
     deploymentTarget: "18.0"
     sources:
       - path: App/Phone
+      - path: App/Shared
     info:
       path: App/Phone/Info.plist
       properties:
         UILaunchScreen: {}
+        # Required for `Activity.request` to actually surface anything —
+        # without this, the Lock Screen/Dynamic Island Live Activity
+        # request silently no-ops even with the entry point built.
+        NSSupportsLiveActivities: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         UISupportedInterfaceOrientations~ipad:
@@ -59,6 +64,12 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # Lets a capture session's AVAudioSession stay active — and its
+        # AVAudioEngine tap keep delivering buffers — once the screen locks
+        # or the app backgrounds, matching Voice Memos (2026-08-22). Closes
+        # the gap `NSP-149`/`NSP-163` both flagged as their own open risk.
+        UIBackgroundModes:
+          - audio
         NSMicrophoneUsageDescription: >-
           North-Star Promise records meeting audio you start from Today so it can transcribe and summarize it,
           and — only while you've turned on Ambient Mode — listens for action items and reminders without
@@ -97,6 +108,7 @@ targets:
       - package: NSPActions
       - package: NSPDesignSystem
       - target: NorthStarWatch
+      - target: NorthStarWidgets
 
   NorthStarPhoneTests:
     type: bundle.unit-test
@@ -143,11 +155,35 @@ targets:
       - target: NorthStarWatch
       - package: NSPTestSupport
 
+  # The Lock Screen / Dynamic Island Live Activity that mirrors capture
+  # state (docs/03 §2.2) — a pure *view*, per that section's own rule:
+  # nothing here can start, stop, or otherwise affect a recording, it only
+  # renders what `App/Phone/CaptureActivityController.swift` publishes.
+  NorthStarWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - path: App/Widgets
+      - path: App/Shared
+    info:
+      path: App/Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: NorthStarWidgets
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1,2"
+        PRODUCT_BUNDLE_IDENTIFIER: com.dexterjackson.northstarpromise.phone.widgets
+        SKIP_INSTALL: NO
+
 schemes:
   NorthStarPhone:
     build:
       targets:
         NorthStarPhone: all
+        NorthStarWidgets: all
         NorthStarPhoneTests: [test]
     test:
       targets:

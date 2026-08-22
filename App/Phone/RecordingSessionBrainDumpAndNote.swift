@@ -48,6 +48,7 @@ extension RecordingSession {
             brainDumpID = newBrainDumpID
             state = .recording
             startElapsedTimer(from: Date())
+            CaptureActivityController.shared.start(mode: .mentalNote)
         } catch {
             state = .failed(Self.describeFailure(error))
         }

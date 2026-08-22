@@ -22,14 +22,12 @@ import Speech
 /// below is written to the documented `SFSpeechRecognizer` contract but
 /// unverified on hardware.
 ///
-/// **Foreground-only today.** `project.yml` declares no `UIBackgroundModes`
-/// entry — same open risk `NSP-149` (Scheduled Recording) already flags
-/// for its own auto-stop timer, not silently assumed away here either.
-/// Without it, iOS suspends this session shortly after the app leaves the
-/// foreground; a genuinely hours-long "listen while you go about your day"
-/// session needs that entitlement added deliberately, with the same
-/// App-Review-scrutiny tradeoff `NSP-149`'s own ticket text calls out, not
-/// as a side effect of this feature landing.
+/// **Survives backgrounding as of 2026-08-22.** `project.yml` now declares
+/// `UIBackgroundModes: audio` app-wide (same fix `NSP-149`'s own ticket
+/// text flagged as the open risk), so this session's `AVAudioSession`
+/// keeps iOS from suspending the app once it leaves the foreground, same
+/// as `CaptureEngine`'s. Still unverified on real hardware — this
+/// environment has no way to lock a physical device and check.
 @MainActor
 @Observable
 public final class AmbientCoordinator {
@@ -114,9 +112,12 @@ public final class AmbientCoordinator {
         announceIfRequired()
         startElapsedTimer()
         startDurationTimer()
+        CaptureActivityController.shared.start(mode: .exerciseMode, startedAt: sessionStartedAt ?? Date())
     }
 
-    /// "Continue Ambient Mode?" → Yes — restarts the duration clock.
+    /// "Continue Ambient Mode?" → Yes — restarts the duration clock. The
+    /// Lock Screen card never showed a paused state during the reprompt
+    /// (listening never actually stopped), so there's nothing to update.
     public func continueSession() {
         guard state == .awaitingContinuePrompt else { return }
         state = .listening
@@ -140,6 +141,7 @@ public final class AmbientCoordinator {
         suggestionsThisSession = 0
         lastEvaluatedLength = 0
         sessionStartedAt = nil
+        CaptureActivityController.shared.end()
     }
 
     /// Same audible-announcement mechanism meeting recording already has
