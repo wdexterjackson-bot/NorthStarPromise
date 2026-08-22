@@ -25,11 +25,17 @@ struct DashboardCaptureButton: View {
     let onStartMeeting: () -> Void
     let onStartMentalNote: () -> Void
     let onImportAudio: () -> Void
+    /// `nil` when `FeatureFlag.ambientMode` is off — the menu item is
+    /// absent rather than present-but-disabled.
+    var onStartAmbientMode: (() -> Void)?
 
     var body: some View {
         Menu {
             Button("Record a Meeting", systemImage: "mic.fill", action: onStartMeeting)
             Button("Record a Mental Note", systemImage: "brain.head.profile", action: onStartMentalNote)
+            if let onStartAmbientMode {
+                Button("Record in Exercise Mode", systemImage: "ear", action: onStartAmbientMode)
+            }
             Button("Import Recording", systemImage: "square.and.arrow.down", action: onImportAudio)
         } label: {
             ZStack {

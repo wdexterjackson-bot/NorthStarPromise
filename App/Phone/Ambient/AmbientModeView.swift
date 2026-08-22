@@ -2,12 +2,15 @@ import NSPCore
 import NSPDesignSystem
 import SwiftUI
 
-/// Ambient Mode's home screen ("Overheard" recommendation, 2026-08-22) —
-/// reached from My Work's toolbar. Start/Stop, live elapsed time, and the
-/// duration reprompt — the same "tap to start, tap to stop" shape a
-/// meeting recording already has, no separate consent step of its own.
-/// The Ambient Suggestions inbox is a separate screen, reached from here
-/// once there's something to review.
+/// "Exercise Mode"'s home screen — the user-facing name for what's
+/// internally still `AmbientCoordinator`/`AmbientSuggestion` etc.
+/// ("Overheard" recommendation, 2026-08-22; relabeled 2026-08-22). Reached
+/// from the capture button's long-press menu ("Record in Exercise Mode")
+/// and My Work's toolbar. Start/Stop, live elapsed time, and the duration
+/// reprompt — the same "tap to start, tap to stop" shape a meeting
+/// recording already has, no separate consent step of its own. The
+/// Ambient Suggestions inbox is a separate screen, reached from here once
+/// there's something to review.
 struct AmbientModeView: View {
     let environment: AppEnvironment
 
@@ -34,10 +37,10 @@ struct AmbientModeView: View {
                 .font(Typo.ui(13, .semibold))
             }
             .padding(NSPSpacing.large)
-            .navigationTitle("Ambient Mode")
+            .navigationTitle("Exercise Mode")
             .navigationBarTitleDisplayMode(.inline)
             .confirmationDialog(
-                "Continue Ambient Mode?", isPresented: continuePromptBinding, titleVisibility: .visible
+                "Continue Exercise Mode?", isPresented: continuePromptBinding, titleVisibility: .visible
             ) {
                 Button("Continue") { coordinator.continueSession() }
                 Button("Stop", role: .destructive) { coordinator.stop() }
@@ -53,9 +56,9 @@ struct AmbientModeView: View {
         case .idle:
             VStack(spacing: NSPSpacing.small) {
                 Image(systemName: "ear").font(.system(size: 44)).foregroundStyle(Palette.textTertiary)
-                Text("Ambient Mode is off").font(Typo.ui(15, .semibold))
+                Text("Exercise Mode is off").font(Typo.ui(15, .semibold))
                 if !isAmbientModeEnabled {
-                    Text("Turn it on in Settings → Ambient before starting a session.")
+                    Text("Turn it on in Settings → Exercise Mode before starting a session.")
                         .font(Typo.ui(12.5, .medium)).foregroundStyle(Palette.textTertiary)
                         .multilineTextAlignment(.center)
                 }
@@ -86,7 +89,7 @@ struct AmbientModeView: View {
             Button {
                 Task { await coordinator.start(durationMinutes: durationMinutes) }
             } label: {
-                Text("Start Ambient Mode").font(Typo.ui(15, .bold)).frame(maxWidth: .infinity)
+                Text("Start Exercise Mode").font(Typo.ui(15, .bold)).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .disabled(!isAmbientModeEnabled)
@@ -114,6 +117,10 @@ struct AmbientModeView: View {
     }
 
     private static func durationLabel(_ minutes: Int) -> String {
-        minutes < 60 ? "\(minutes) minutes" : "\(minutes / 60)\(minutes % 60 == 0 ? "" : ".5") hours"
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours == 0 { return "\(minutes) minutes" }
+        if remainder == 0 { return "\(hours) hour\(hours == 1 ? "" : "s")" }
+        return "\(hours) hour\(hours == 1 ? "" : "s") \(remainder) min"
     }
 }

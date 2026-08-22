@@ -39,6 +39,8 @@ struct PadDashboardSidebar: View {
     let onStartNotesOnly: () -> Void
     let onStartMentalNote: () -> Void
     let onImportAudio: () -> Void
+    /// `nil` when `FeatureFlag.ambientMode` is off.
+    let onStartAmbientMode: (() -> Void)?
     let onAddAgendaItem: () -> Void
     let onStartScheduledRecording: (ScheduledRecording) -> Void
     let onModifyScheduledRecording: (ScheduledRecording, PadAgendaRowView.RecurrenceEditScope?) -> Void
@@ -81,7 +83,7 @@ struct PadDashboardSidebar: View {
                 DashboardNotesOnlyButton(action: onStartNotesOnly)
                 DashboardCaptureButton(
                     isRecording: false, onStartMeeting: onStartMeeting, onStartMentalNote: onStartMentalNote,
-                    onImportAudio: onImportAudio
+                    onImportAudio: onImportAudio, onStartAmbientMode: onStartAmbientMode
                 )
                 DashboardBrainDumpButton(action: onStartMentalNote)
             }

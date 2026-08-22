@@ -52,6 +52,7 @@ struct PadRootView: View {
     @State private var windowWidth: CGFloat = 1024
     private var isCompactPadWidth: Bool { windowWidth < 1000 }
     @State private var isShowingAudioImportPicker = false
+    @State private var isShowingAmbientMode = false
     @State private var agendaSheet: AgendaSheet?
 
     /// Drives the single `AddAgendaItemFormView` sheet for both the "+"
@@ -170,6 +171,9 @@ struct PadRootView: View {
             isShowingPicker: $isShowingAudioImportPicker, environment: environment,
             onDone: { Task { await loadDashboardModel() } }
         )
+        .sheet(isPresented: $isShowingAmbientMode) {
+            AmbientModeView(environment: environment)
+        }
         .sheet(item: $agendaSheet) { sheet in
             let onDone: () -> Void = {
                 Task { await loadDashboardModel() }
@@ -383,6 +387,8 @@ struct PadRootView: View {
                     Task { await recordingSession.startBrainDump() }
                     selectedArea = .today
                 }, onImportAudio: { isShowingAudioImportPicker = true },
+                onStartAmbientMode: environment.featureFlagProvider.isEnabled(.ambientMode)
+                    ? { isShowingAmbientMode = true } : nil,
                 onAddAgendaItem: { agendaSheet = .create },
                 onStartScheduledRecording: { item in Task { await startScheduledRecording(item) } },
                 onModifyScheduledRecording: { item, scope in Task { await modifyScheduledRecording(item, scope: scope) } },

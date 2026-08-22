@@ -22,7 +22,7 @@ struct AmbientSuggestionsInboxView: View {
             } else if suggestions.isEmpty {
                 ContentUnavailableView(
                     "Nothing waiting", systemImage: "sparkles",
-                    description: Text("Ambient Mode's catches show up here for you to review."))
+                    description: Text("Exercise Mode's catches show up here for you to review."))
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: NSPSpacing.medium) {
@@ -129,7 +129,7 @@ private struct AmbientSuggestionRowView: View {
             }
             Text(suggestion.text).font(Typo.ui(14.5, .semibold))
             VStack(alignment: .leading, spacing: 2) {
-                Text("From Ambient Mode — no recording exists").font(Typo.ui(10.5, .medium))
+                Text("From Exercise Mode — no recording exists").font(Typo.ui(10.5, .medium))
                     .foregroundStyle(Palette.textQuaternary)
                 Text("\"\(suggestion.evidence.excerpt)\"").font(Typo.ui(11.5, .medium)).italic()
                     .foregroundStyle(Palette.textTertiary).lineLimit(3)

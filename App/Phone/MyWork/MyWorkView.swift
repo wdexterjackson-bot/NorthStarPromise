@@ -66,7 +66,7 @@ struct MyWorkView: View {
                         } label: {
                             Image(systemName: "ear")
                         }
-                        .accessibilityLabel("Ambient Mode")
+                        .accessibilityLabel("Exercise Mode")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {

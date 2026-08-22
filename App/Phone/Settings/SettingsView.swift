@@ -144,17 +144,20 @@ struct SettingsView: View {
 
     /// Duration options in the picker — 30-minute steps up to 2.5 hours
     /// (150 min), the locked decision from "Overheard," 2026-08-22.
-    private static let ambientDurationOptionsMinutes = [30, 60, 90, 120, 150]
+    /// 5-minute increments up to 2.5 hours (150 min) — the locked
+    /// decision, 2026-08-22.
+    private static let ambientDurationOptionsMinutes = Array(stride(from: 5, through: 150, by: 5))
 
-    /// Ambient Mode's own settings ("Overheard" recommendation, 2026-08-22)
-    /// — visible, opt-in, on-device passive listening. Toggling this on is
-    /// the workspace's standing permission to use the feature at all; a
-    /// live session's own start/stop lives on `AmbientModeView`, reached
-    /// from My Work, not here.
+    /// "Exercise Mode"'s own settings — internally still `Policy
+    /// .ambientModeEnabled` etc. ("Overheard" recommendation, 2026-08-22;
+    /// relabeled 2026-08-22). Toggling this on is the workspace's standing
+    /// permission to use the feature at all; a live session's own
+    /// start/stop lives on `AmbientModeView`, reached from the capture
+    /// button's long-press menu or My Work, not here.
     private var ambientSection: some View {
         Section {
             Toggle(
-                "Ambient Mode",
+                "Exercise Mode",
                 isOn: Binding(
                     get: { environment.defaultPolicy?.ambientModeEnabled ?? false },
                     set: { newValue in Task { await setAmbientModeEnabled(newValue) } }))
@@ -169,16 +172,23 @@ struct SettingsView: View {
                         Text(Self.durationLabel(minutes)).tag(minutes)
                     }
                 }
+                .pickerStyle(.wheel)
             }
         } header: {
-            Text("Ambient")
+            Text("Exercise Mode")
         } footer: {
-            Text("Listens for action items and reminders without recording audio or saving a transcript.")
+            Text(
+                "Recording in Exercise Mode allows you to capture notes, project updates, action items, etc. for "
+                    + "your later review without saving the recording or creating a meeting out of the session.")
         }
     }
 
     private static func durationLabel(_ minutes: Int) -> String {
-        minutes < 60 ? "\(minutes) min" : "\(minutes / 60)\(minutes % 60 == 0 ? "" : ".5") hr"
+        let hours = minutes / 60
+        let remainder = minutes % 60
+        if hours == 0 { return "\(minutes) min" }
+        if remainder == 0 { return "\(hours) hr" }
+        return "\(hours) hr \(remainder) min"
     }
 
     private func setAmbientModeEnabled(_ enabled: Bool) async {

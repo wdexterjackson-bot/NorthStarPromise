@@ -36,6 +36,7 @@ struct DashboardView: View {
     @State private var editingScheduledRecording: ScheduledRecording?
     @State private var scrollOffset: CGFloat = 0
     @State private var isShowingAudioImportPicker = false
+    @State private var isShowingAmbientMode = false
 
     private static let maxLibraryRows = 6
     private var isHeaderCollapsed: Bool { scrollOffset < -90 }
@@ -87,7 +88,9 @@ struct DashboardView: View {
                         Task { await session.startBrainDump() }
                         openToday()
                     },
-                    onImportAudio: { isShowingAudioImportPicker = true }
+                    onImportAudio: { isShowingAudioImportPicker = true },
+                    onStartAmbientMode: environment.featureFlagProvider.isEnabled(.ambientMode)
+                        ? { isShowingAmbientMode = true } : nil
                 )
                 .padding(.trailing, 20)
                 .padding(.bottom, 100)
@@ -96,6 +99,9 @@ struct DashboardView: View {
                 isShowingPicker: $isShowingAudioImportPicker, environment: environment,
                 onDone: { Task { await load() } }
             )
+            .sheet(isPresented: $isShowingAmbientMode) {
+                AmbientModeView(environment: environment)
+            }
             .navigationDestination(for: MeetingID.self) { meetingID in
                 MeetingDetailView(meetingID: meetingID, environment: environment)
             }
