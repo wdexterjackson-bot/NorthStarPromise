@@ -220,7 +220,7 @@ public final class AppEnvironment {
         self.syncCoordinator = coordinators.sync
         self.intelligenceCoordinator = coordinators.intelligence
         self.scheduledRecordingCoordinator = coordinators.scheduledRecording
-        self.featureFlagProvider = ScheduledRecordingEnabledProvider()
+        self.featureFlagProvider = HardcodedEnabledFlagsProvider()
         (self.containerRootURL, self.deviceID, self.clock) = (appSupportURL, deviceID, clock)
         self.defaultImportExportDirectoryURL = defaultImportExportDirectoryURL
         self.calendarSyncEnabled = UserDefaults.standard.bool(forKey: Self.calendarSyncEnabledKey)
@@ -384,17 +384,33 @@ public final class AppEnvironment {
 
 }
 
-/// `AllFlagsOffProvider` plus one exception — the user has explicitly
-/// directed Scheduled Recording into daily use in Today (docs/07 §2.1),
-/// ahead of a real remote-config/build-setting-backed provider existing.
-/// Flipping this does not resolve `NSP-149`'s two open hardware-validation
-/// risks (EventKit full-access/write-only grant interaction; whether a
-/// live recording and its auto-stop timer survive backgrounding without
-/// `UIBackgroundModes: audio` declared) — those stay real, open risks,
-/// this only makes the feature reachable. `AllFlagsOffProvider` itself is
-/// untouched, so anything else relying on "every flag off" keeps working.
-private struct ScheduledRecordingEnabledProvider: FeatureFlagProviding {
+/// `AllFlagsOffProvider` plus explicit exceptions — ahead of a real
+/// remote-config/build-setting-backed provider existing, each flag here
+/// was flipped on a specific, direct instruction, not a blanket "ship
+/// everything" default. `AllFlagsOffProvider` itself is untouched, so
+/// anything else relying on "every flag off" keeps working.
+///
+/// - `.scheduledRecording`: the user directed this into daily use in Today
+///   (docs/07 §2.1). Flipping it does not resolve `NSP-149`'s two open
+///   hardware-validation risks (EventKit full-access/write-only grant
+///   interaction; whether a live recording and its auto-stop timer survive
+///   backgrounding without `UIBackgroundModes: audio` declared) — those
+///   stay real, open risks, this only makes the feature reachable.
+/// - `.ambientMode`: turned on 2026-08-22 once the user confirmed the
+///   legal review of consent-recording statutes ("Overheard" recommendation's
+///   own gating condition) had actually completed. This does not resolve
+///   `NSP-163`'s two open risks either — foreground-only (`project.yml`
+///   still declares no `UIBackgroundModes`) and unverified on real
+///   hardware/audio (this environment can't test a live microphone).
+///   Every other gate underneath the flag is unchanged: `Policy
+///   .ambientModeEnabled` still defaults `false` per workspace, the
+///   one-time disclosure still has to be acknowledged, and every session
+///   still starts from an explicit tap — this flag only makes the
+///   already-built, already-opt-in feature reachable at all.
+private struct HardcodedEnabledFlagsProvider: FeatureFlagProviding {
+    private static let enabledFlags: Set<FeatureFlag> = [.scheduledRecording, .ambientMode]
+
     func isEnabled(_ flag: FeatureFlag) -> Bool {
-        flag == .scheduledRecording
+        Self.enabledFlags.contains(flag)
     }
 }

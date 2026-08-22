@@ -33,7 +33,9 @@ struct SettingsView: View {
 
                 calendarSection
 
-                ambientSection
+                if environment.featureFlagProvider.isEnabled(.ambientMode) {
+                    ambientSection
+                }
 
                 unconfiguredSection(
                     title: "Capture", symbol: "mic.fill", tint: .red,

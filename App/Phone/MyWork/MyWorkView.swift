@@ -59,13 +59,15 @@ struct MyWorkView: View {
             }
             .navigationTitle("My Work")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    NavigationLink {
-                        AmbientModeView(environment: environment)
-                    } label: {
-                        Image(systemName: "ear")
+                if environment.featureFlagProvider.isEnabled(.ambientMode) {
+                    ToolbarItem(placement: .primaryAction) {
+                        NavigationLink {
+                            AmbientModeView(environment: environment)
+                        } label: {
+                            Image(systemName: "ear")
+                        }
+                        .accessibilityLabel("Ambient Mode")
                     }
-                    .accessibilityLabel("Ambient Mode")
                 }
                 ToolbarItem(placement: .primaryAction) {
                     NavigationLink {

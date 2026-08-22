@@ -352,11 +352,16 @@ artifact for the full recommendation, decisions, and rationale). Corrected from 
 opt-in Ambient Mode, never invisible background listening (the platform doesn't allow true invisibility
 regardless); a fixed, audible "Recording in Process" cue on every session start/renewal; user-set duration
 (30-min steps, 150-min ceiling) with an explicit continue/stop reprompt at the limit; wake word cut entirely —
-ambient extraction alone already catches a directly-addressed reminder, no second mechanism needed. **Broad
-availability is gated on a real legal review of consent-recording statutes** — `FeatureFlag.ambientMode` exists
-and is fully wired, but stays off in `ScheduledRecordingEnabledProvider`-equivalent code until that review
-happens; only Phase 1/2 code shipping behind the flag, never the flag itself flipping on for real users, is
-what "done" means below.
+ambient extraction alone already catches a directly-addressed reminder, no second mechanism needed.
+`FeatureFlag.ambientMode` gated broad availability on a real legal review of consent-recording statutes — that
+review completed and the user confirmed it 2026-08-22, so the flag is now on in `HardcodedEnabledFlagsProvider`
+(`AppEnvironment.swift`, the same hardcoded-until-a-real-provider-exists mechanism `.scheduledRecording` already
+used). Turning the flag on only makes the already-built, already-opt-in feature *reachable* — every gate
+underneath it is unchanged: `Policy.ambientModeEnabled` still defaults `false` per workspace, the one-time
+disclosure still has to be acknowledged, and every session still starts from an explicit tap. **Two risks stay
+open regardless of the flag** and are not resolved by the legal review clearing: foreground-only (`project.yml`
+declares no `UIBackgroundModes`) and unverified on real hardware/audio (this environment can't test a live
+microphone) — see `NSP-163`.
 
 | NSP-161 | ~~Ambient Mode — data model~~ — **done 2026-08-22** | NSPCore, NSPPersistence | `AmbientSuggestion` (kind, text, optional thread/counterparty match, `AmbientEvidence`, status) is the review-inbox entity — deliberately not folded into `Action`/`Decision` directly, since `Decision.meetingID` is non-optional by design and Ambient Mode never has one; accepting a suggestion always creates a freestanding `Action`. `AmbientEvidence` (excerpt + timestamp, no audio) is the honest alternative to `EvidenceSpan` for a mode with nothing durable to point back to. `Policy` gained `ambientModeEnabled`/`ambientTrustedLocations`/`ambientSessionDurationMinutes` (the trusted-locations field mirrors `blockedLocations`'s shape exactly — a plain label list, not backed by real `CoreLocation` geofencing, which doesn't exist in this codebase for either field). `Person` gained `ambientListeningOptOut`. Migration 023. | — |
 | NSP-162 | ~~Ambient Mode — relevance gate + extraction~~ — **done 2026-08-22** | NSPIntelligence | `HeuristicAmbientRelevanceGate`/`HeuristicAmbientExtractor` — deterministic, fully unit-tested pattern matching (commitment language, self-directed reminders, explicit decisions, scheduling confirmations) rather than an LLM call, a deliberate choice: this environment can't verify a `FoundationModels` integration against real speech, and everything downstream already requires human review regardless, so precision matters less than having behavior that's actually verified. 13 tests cover the exact calibration examples from "Overheard" (the Tim/Dexter commitment fires, "pass the salt" doesn't). A `FoundationModels`-backed classifier is the natural upgrade once it can be verified on hardware. | — |
