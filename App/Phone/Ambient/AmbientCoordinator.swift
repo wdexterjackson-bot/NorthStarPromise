@@ -111,18 +111,16 @@ public final class AmbientCoordinator {
 
         sessionStartedAt = Date()
         state = .listening
-        speak(Self.disclosureCue)
+        announceIfRequired()
         startElapsedTimer()
         startDurationTimer()
     }
 
-    /// "Continue Ambient Mode?" → Yes — re-announces the disclosure cue
-    /// (a renewed session is still a fresh listening window to anyone who
-    /// just walked in) and restarts the duration clock.
+    /// "Continue Ambient Mode?" → Yes — restarts the duration clock.
     public func continueSession() {
         guard state == .awaitingContinuePrompt else { return }
         state = .listening
-        speak(Self.disclosureCue)
+        announceIfRequired()
         startDurationTimer()
     }
 
@@ -144,7 +142,14 @@ public final class AmbientCoordinator {
         sessionStartedAt = nil
     }
 
-    private static let disclosureCue = "Recording in Process"
+    /// Same audible-announcement mechanism meeting recording already has
+    /// (`Policy.announcementRequired`, docs/06 §3.2) — Ambient Mode isn't a
+    /// separate consent surface, it reuses this workspace's existing
+    /// setting rather than forcing its own.
+    private func announceIfRequired() {
+        guard environment.defaultPolicy?.announcementRequired == true else { return }
+        speak("Recording in Process")
+    }
 
     private func speak(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)

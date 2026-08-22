@@ -173,9 +173,7 @@ struct SettingsView: View {
         } header: {
             Text("Ambient")
         } footer: {
-            Text(
-                "Listens for action items and reminders without recording audio or saving a transcript. \"Recording "
-                    + "in Process\" plays out loud whenever a session starts, heard by anyone in the room.")
+            Text("Listens for action items and reminders without recording audio or saving a transcript.")
         }
     }
 

@@ -187,30 +187,24 @@ public struct ConsentRecord: Sendable, Codable {
 the type's doc comment and the UI string say exactly that. Method `.none` is a legitimate value and must not be
 styled as an error.
 
-### 3.5 Ambient Mode consent (added 2026-08-22, "Overheard" recommendation)
+### 3.5 Ambient Mode (added 2026-08-22, "Overheard" recommendation; consent model simplified 2026-08-22)
 
-Ambient Mode has no bounded meeting and no participant roster, so §§ 3.1–3.4 above don't directly apply — there
-is no `ConsentRecord` for a session that never produces a `Meeting`. Its consent model instead:
+Ambient Mode is treated the same as recording a meeting, not as a separate consent surface with its own
+onboarding — it has no bounded meeting and no participant roster, so §§ 3.1–3.4's per-meeting `ConsentRecord`
+doesn't apply, but the same underlying announcement mechanism does:
 
-- **A fixed, audible cue — "Recording in Process" — plays on every session start and every duration-limit
-  renewal**, not a configurable announcement style. This is deliberately the stronger of the phrasings
-  considered: it tells anyone in the room exactly how to treat the moment, whether or not audio ever reaches
-  disk. Never a silent or visual-only start.
-- **A one-time, hard-to-miss disclosure screen** (`AmbientModeDisclosureView`) is required before the feature
-  can be used for the first time — plain language, same "the app cannot determine what is legal for you"
-  posture § 3.1 already takes for recorded meetings, extended to a mode with no bounded roster to check consent
-  against at all.
-- **Default off.** `Policy.ambientModeEnabled` gates the feature at the workspace level; a live session's own
-  duration is capped (`Policy.ambientSessionDurationMinutes`, 30–150 minutes) with an explicit "Continue Ambient
-  Mode?" reprompt at the limit — never a silently-forgotten, indefinitely-running session.
+- **Audible announcement reuses `Policy.announcementRequired`** — the identical workspace setting § 3.2's
+  "Audible announcement" row already governs for recorded meetings. When it's on, "Recording in Process" plays
+  on every Ambient session start and every duration-limit renewal; when it's off, a session starts the same way
+  starting a meeting recording does. No Ambient-specific announcement setting exists.
+- **Default off, opt-in.** `Policy.ambientModeEnabled` gates the feature at the workspace level; a live
+  session's own duration is capped (`Policy.ambientSessionDurationMinutes`, 30–150 minutes) with an explicit
+  "Continue Ambient Mode?" reprompt at the limit — never a silently-forgotten, indefinitely-running session.
 - **Nothing is ever auto-added.** Every extraction lands in the Ambient Suggestions inbox as a `.pending`
   `AmbientSuggestion`; accepting it creates a real, freestanding `Action` only after a human confirms it (I6's
   spirit, extended to this feature's own version of "the world changing").
-- **Not legal advice, flagged explicitly**: real-time processing of a conversation without every party's
-  knowledge is plausibly "recording" under a number of US states' consent statutes even though no audio file is
-  ever written. Broad availability is gated on a real legal review, not a product-code decision alone —
-  `FeatureFlag.ambientMode` exists and is fully wired but stays off pending that review (`docs/09-BACKLOG.md`
-  NSP-161–165).
+- `FeatureFlag.ambientMode` is on (`docs/09-BACKLOG.md` NSP-161–165) — broad availability was gated on a legal
+  review of consent-recording statutes, which the user confirmed complete 2026-08-22.
 
 ---
 
